@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Trip Map"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 
-<meta name="trip-map-rev" content="locate-2026-09-18"/>
+<meta name="trip-map-rev" content="planner-sheet-2026-09-18"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root {
@@ -83,11 +83,6 @@
   }
   .map-wrap { position: relative; flex: 1; min-width: 0; min-height: 280px; }
   #map { position: absolute; inset: 0; background: #0a0e14; }
-  .legend {
-    position: absolute; bottom: 24px; left: 12px; z-index: 900;
-    background: rgba(26,35,50,.94); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 10px 12px; box-shadow: var(--shadow); font-size: .75rem; max-width: 240px;
-  }
   .legend h3 { margin: 0 0 6px; font-size: .8rem; color: var(--accent); }
   .legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--muted); }
   .legend-dot { border-radius: 50%; border: 2px solid #fff; opacity: .9; flex-shrink: 0; }
@@ -221,7 +216,112 @@
     font-size: .75rem !important; padding: 7px 10px !important;
   }
 
-  /* Touch-friendly defaults */
+  /* Locate control — prefer <a> inside .leaflet-bar (more reliable taps) */
+  .leaflet-bar.locate-control a.locate-btn {
+    width: 34px; height: 34px; line-height: 34px; display: block;
+    text-decoration: none; color: #1a2332; font-size: 18px; font-weight: 700;
+    text-align: center; background: #fff;
+  }
+  .leaflet-bar.locate-control a.locate-btn:hover { background: #f4f4f4; color: #1a2332; }
+  .leaflet-bar.locate-control a.locate-btn.active,
+  .leaflet-bar.locate-control a.locate-btn.locating { color: #2563eb; background: #eff6ff; }
+  .leaflet-bar.locate-control a.locate-btn.locating { opacity: .7; }
+
+  /* Legend chip (collapsed on phone) */
+  .legend-control {
+    position: absolute; bottom: 24px; left: 12px; z-index: 900;
+    max-width: min(260px, 78vw);
+  }
+  .legend-chip {
+    display: none;
+    appearance: none; border: 1px solid var(--border); border-radius: 999px;
+    background: rgba(26,35,50,.94); color: var(--text);
+    font-weight: 650; font-size: .78rem; padding: 8px 14px;
+    cursor: pointer; box-shadow: var(--shadow); min-height: 36px;
+  }
+  .legend-chip[aria-expanded="true"] { background: var(--accent2); border-color: transparent; color: #fff; }
+  .legend {
+    position: static;
+    background: rgba(26,35,50,.94); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; box-shadow: var(--shadow); font-size: .75rem; max-width: 240px;
+  }
+
+  /* Map FABs + route summary */
+  .map-fabs {
+    position: absolute; top: 12px; right: 12px; z-index: 920;
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  }
+  .map-fabs button, .route-summary button {
+    appearance: none; cursor: pointer; font-weight: 650; font-size: .85rem;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: rgba(26,35,50,.94); color: var(--text);
+    padding: 10px 14px; box-shadow: var(--shadow); min-height: 40px;
+  }
+  .map-fabs button.primary, .route-summary button.primary {
+    background: var(--accent2); border-color: transparent; color: #fff;
+  }
+  .map-fabs .list-toggle { display: none; }
+  .route-summary {
+    display: none;
+    position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 920;
+    background: rgba(26,35,50,.96); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 10px 12px;
+    align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  #app[data-planner="closed"] .route-summary.has-route { display: flex; }
+  .route-summary .sum-main { flex: 1; min-width: 0; }
+  .route-summary .sum-title { font-weight: 700; font-size: .9rem; }
+  .route-summary .sum-meta { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .route-summary .sum-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  /* Planner sheet */
+  .planner-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 1990;
+    background: rgba(0,0,0,.45);
+  }
+  #app[data-planner="edit"] .planner-backdrop { display: block; }
+  #app[data-planner="pick"] .planner-backdrop { display: block; background: transparent; pointer-events: none; }
+  #plannerSheet {
+    display: none;
+    position: fixed; z-index: 2000;
+    left: 0; right: 0; bottom: 0;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -12px 40px rgba(0,0,0,.45);
+    flex-direction: column;
+    max-height: 100%;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #app[data-planner="edit"] #plannerSheet,
+  #app[data-planner="pick"] #plannerSheet { display: flex; }
+  #app[data-planner="edit"] #plannerSheet { top: 0; max-height: 100%; }
+  #app[data-planner="pick"] #plannerSheet {
+    top: auto; height: 42%; max-height: 48vh; min-height: 220px;
+  }
+  #app[data-planner="edit"] .map-fabs,
+  #app[data-planner="edit"] .route-summary { display: none !important; }
+  .planner-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .planner-head h2 { margin: 0; font-size: 1rem; font-weight: 700; flex: 1; }
+  .planner-head .sheet-close {
+    appearance: none; border: 1px solid var(--border); background: var(--panel2);
+    color: var(--text); width: 40px; height: 40px; border-radius: 10px;
+    font-size: 1.2rem; cursor: pointer; line-height: 1;
+  }
+  .planner-body {
+    flex: 1; min-height: 0; overflow: auto; padding: 12px 14px 18px;
+  }
+  #app[data-planner="pick"] .planner-edit-only { display: none; }
+  #app[data-planner="edit"] .planner-pick-hint { display: none; }
+  .planner-pick-hint { font-size: .78rem; color: var(--muted); margin: 0 0 8px; }
+
+  .side-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 1500;
+    background: rgba(0,0,0,.4);
+  }
+
   .tabs button, .controls button, .route-box button, .filters-toggle {
     min-height: 40px;
   }
@@ -238,20 +338,28 @@
     header h1 { font-size: .95rem; }
     .controls { margin-left: 0; width: 100%; }
     .main { flex-direction: column; }
-    .map-wrap { min-height: 46vh; flex: 1 1 auto; }
+    .map-wrap { min-height: 0; flex: 1 1 auto; }
+    .map-fabs .list-toggle { display: inline-flex; align-items: center; }
     .side {
-      flex: 0 0 auto;
+      display: none;
+      position: fixed; z-index: 1600;
+      left: 0; right: 0; bottom: 0;
       width: 100%;
-      max-height: min(40vh, 360px);
+      max-height: min(70vh, 520px);
       border-left: none;
       border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
       padding-bottom: env(safe-area-inset-bottom);
+      box-shadow: 0 -12px 40px rgba(0,0,0,.45);
     }
-    .legend { bottom: 10px; left: 8px; font-size: .7rem; max-width: min(220px, 70vw); padding: 8px 10px; }
+    #app[data-list="open"] .side { display: flex; }
+    #app[data-list="open"] .side-backdrop { display: block; }
+    .legend-control { bottom: 10px; left: 8px; }
+    .legend { font-size: .7rem; max-width: min(220px, 70vw); padding: 8px 10px; }
     .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; }
+    .route-summary { left: 8px; right: 8px; bottom: 8px; }
   }
 
-  /* Phone: collapse bulky filter row behind a toggle; prevent iOS input zoom */
   @media (max-width: 700px) {
     .filters-toggle {
       display: inline-flex;
@@ -283,22 +391,34 @@
     .controls select,
     .route-box input,
     .route-box select {
-      font-size: 16px; /* stops iOS Safari zoom-on-focus */
+      font-size: 16px;
       min-height: 40px;
     }
     .controls input[type="search"] { width: 100%; max-width: 100%; }
     .tab-panel { width: 100%; display: none; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; }
     .tab-panel.active { display: flex; }
     .stats { width: 100%; order: 5; font-size: .72rem; }
-    .map-wrap { min-height: 50vh; }
-    .side { max-height: min(38vh, 320px); }
     .list-item { padding: 12px; }
     .side summary { padding: 12px; min-height: 44px; }
+    .legend-chip { display: inline-flex; align-items: center; }
+    .legend-control:not(.expanded) .legend { display: none; }
+    .legend-control.expanded .legend { display: block; margin-top: 8px; }
+  }
+
+  @media (min-width: 701px) and (max-width: 959px) {
+    .legend-chip { display: inline-flex; align-items: center; }
+    .legend-control:not(.expanded) .legend { display: none; }
+    .legend-control.expanded .legend { display: block; margin-top: 8px; }
+  }
+
+  @media (min-width: 960px) {
+    .legend-chip { display: none; }
+    .legend-control .legend { display: block; }
   }
 </style>
 </head>
 <body>
-<div id="app">
+<div id="app" data-planner="closed" data-list="closed">
   <header>
     <h1>Trip <span>Map</span></h1>
     <div class="tabs" role="tablist">
@@ -378,44 +498,27 @@
   <div class="main">
     <div class="map-wrap">
       <div id="map"></div>
-      <div class="legend" id="legend"></div>
-    </div>
-    <div class="side">
-      <details open>
-        <summary>Trip / route planner</summary>
-        <div class="side-body">
-          <div class="route-box">
-            <div class="row">
-              <input id="startCity" placeholder="Start city, ST (e.g. Los Angeles, CA)"/>
-              <button type="button" class="secondary use-loc-btn" id="startMyLoc" title="Use my current location">My loc</button>
-            </div>
-            <div class="row">
-              <input id="stopCity" placeholder="Add stop (city or place)"/>
-              <button type="button" class="secondary" id="addStopBtn">Add</button>
-            </div>
-            <div class="stops-list" id="stopsList"></div>
-            <div class="row">
-              <input id="endCity" placeholder="End city, ST (e.g. Las Vegas, NV)"/>
-              <button type="button" class="secondary use-loc-btn" id="endMyLoc" title="Use my current location">My loc</button>
-            </div>
-            <div class="row">
-              <label style="flex:0 0 auto;font-size:.72rem;color:var(--muted);display:flex;flex-direction:column;gap:2px">Max detour
-                <input type="number" id="maxDetourMin" min="1" step="5" value="40" style="width:72px" title="Estimated extra drive time to leave the route, visit the marker, and rejoin"/>
-              </label>
-              <span class="hint" style="align-self:flex-end;padding-bottom:8px">minutes</span>
-            </div>
-            <div class="row">
-              <button type="button" id="routeBtn">Find routes</button>
-              <button type="button" class="secondary" id="clearRouteBtn">Clear route</button>
-              <button type="button" class="secondary" id="clearStopsBtn">Clear stops</button>
-            </div>
-            <p class="hint">OSRM driving with alternates. Shows markers whose <strong>estimated detour</strong> (leave route → stop → rejoin) is within your max minutes. Alt+click map sets start, then end. Stops via input above.</p>
-            <div id="routeStatus" class="hint"></div>
-            <div class="alt-list" id="altList"></div>
-            <div id="routeResults" class="hint"></div>
-          </div>
+      <div class="legend-control" id="legendControl">
+        <button type="button" class="legend-chip" id="legendToggle" aria-expanded="false" aria-controls="legend">Legend</button>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="map-fabs">
+        <button type="button" class="primary" id="planTripBtn">Plan trip</button>
+        <button type="button" class="list-toggle" id="listToggle" aria-expanded="false">List</button>
+      </div>
+      <div class="route-summary" id="routeSummary" aria-live="polite">
+        <div class="sum-main">
+          <div class="sum-title" id="sumTitle">Route</div>
+          <div class="sum-meta" id="sumMeta"></div>
         </div>
-      </details>
+        <div class="sum-actions">
+          <button type="button" class="primary" id="sumEditBtn">Edit</button>
+          <button type="button" id="sumClearBtn">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="side-backdrop" id="sideBackdrop" hidden></div>
+    <div class="side" id="sidePanel">
       <div class="side-head"><span id="listTitle">Ranked</span>
         <span class="sub" id="listSub">Click to zoom</span>
       </div>
@@ -429,6 +532,50 @@
           <p>Shared Esri World Dark Gray basemap (no OSM tiles). Open <code>index.html</code> via <code>file://</code>. Data: <code>data/rooms.js</code>, <code>data/trails.js</code>.</p>
         </div>
       </details>
+
+    </div>
+  </div>
+
+  <div class="planner-backdrop" id="plannerBackdrop"></div>
+  <div id="plannerSheet" role="dialog" aria-modal="true" aria-labelledby="plannerTitle">
+    <div class="planner-head">
+      <h2 id="plannerTitle">Plan trip</h2>
+      <button type="button" class="sheet-close" id="plannerCloseBtn" aria-label="Close planner">×</button>
+    </div>
+    <div class="planner-body">
+      <p class="planner-pick-hint">Select a route below — map shows alternatives above.</p>
+      <div class="route-box">
+        <div class="planner-edit-only">
+          <div class="row">
+            <input id="startCity" placeholder="Start city, ST (e.g. Los Angeles, CA)"/>
+            <button type="button" class="secondary use-loc-btn" id="startMyLoc" title="Use my current location">My loc</button>
+          </div>
+          <div class="row">
+            <input id="stopCity" placeholder="Add stop (city or place)"/>
+            <button type="button" class="secondary" id="addStopBtn">Add</button>
+          </div>
+          <div class="stops-list" id="stopsList"></div>
+          <div class="row">
+            <input id="endCity" placeholder="End city, ST (e.g. Las Vegas, NV)"/>
+            <button type="button" class="secondary use-loc-btn" id="endMyLoc" title="Use my current location">My loc</button>
+          </div>
+          <div class="row">
+            <label style="flex:0 0 auto;font-size:.72rem;color:var(--muted);display:flex;flex-direction:column;gap:2px">Max detour
+              <input type="number" id="maxDetourMin" min="1" step="5" value="40" style="width:72px" title="Estimated extra drive time to leave the route, visit the marker, and rejoin"/>
+            </label>
+            <span class="hint" style="align-self:flex-end;padding-bottom:8px">minutes</span>
+          </div>
+          <div class="row">
+            <button type="button" id="routeBtn">Find routes</button>
+            <button type="button" class="secondary" id="clearRouteBtn">Clear route</button>
+            <button type="button" class="secondary" id="clearStopsBtn">Clear stops</button>
+          </div>
+          <p class="hint">OSRM driving with alternates. Shows markers whose <strong>estimated detour</strong> (leave route → stop → rejoin) is within your max minutes. Alt+click map sets start, then end. Stops via input above.</p>
+        </div>
+        <div id="routeStatus" class="hint"></div>
+        <div class="alt-list" id="altList"></div>
+        <div id="routeResults" class="hint"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -554,11 +701,12 @@
     opacity: 0.9
   }).addTo(map);
 
-  // —— Current location ——
+  // —— Current location (navigator.geolocation — not Leaflet map.locate) ——
   let locMarker = null;
   let locCircle = null;
   let locateBtnEl = null;
   let lastKnownLocation = null;
+  let locWatchId = null;
   window.__hasCurrentLocation = false;
 
   function setLocateBtnState(state) {
@@ -567,9 +715,9 @@
     locateBtnEl.classList.toggle('active', state === 'active');
   }
 
-  function onLocationFound(e) {
-    const latlng = e.latlng;
-    const acc = Math.max(20, e.accuracy || 40);
+  function applyPosition(coords, flyTo) {
+    const latlng = L.latLng(coords.latitude, coords.longitude);
+    const acc = Math.max(20, coords.accuracy || 40);
     lastKnownLocation = {
       lat: latlng.lat,
       lon: latlng.lng,
@@ -605,44 +753,86 @@
     }
     setLocateBtnState('active');
     updateLegend();
+    if (flyTo) {
+      map.setView(latlng, Math.max(map.getZoom(), 14), { animate: true });
+    }
   }
 
-  function onLocationError(e) {
-    setLocateBtnState(lastKnownLocation ? 'active' : '');
-    const msg = (e && e.message) ? e.message : 'Location unavailable';
-    console.warn('locate error', msg);
-    alert('Could not get your location. Allow location for this site (HTTPS) and try again.\n\n' + msg);
+  function geoErrorMessage(err) {
+    if (!err) return 'Location unavailable.';
+    if (err.code === 1 || err.code === err.PERMISSION_DENIED) {
+      return 'Location permission denied. Allow location for this site in your browser settings, then try again.';
+    }
+    if (err.code === 2 || err.code === err.POSITION_UNAVAILABLE) {
+      return 'Location unavailable. Check that Location Services are on and try again.';
+    }
+    if (err.code === 3 || err.code === err.TIMEOUT) {
+      return 'Location timed out. Move to an open area or try again.';
+    }
+    return err.message || 'Location unavailable.';
+  }
+
+  function clearLocWatch() {
+    if (locWatchId != null && navigator.geolocation) {
+      try { navigator.geolocation.clearWatch(locWatchId); } catch (_) {}
+    }
+    locWatchId = null;
   }
 
   function requestLocation(flyTo) {
-    setLocateBtnState('locating');
-    map.locate({
-      setView: !!flyTo,
-      maxZoom: 14,
-      enableHighAccuracy: true,
-      watch: false,
-      timeout: 20000,
-      maximumAge: 10000
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        setLocateBtnState(lastKnownLocation ? 'active' : '');
+        const msg = 'Geolocation is not supported in this browser.';
+        alert(msg);
+        reject(new Error(msg));
+        return;
+      }
+      setLocateBtnState('locating');
+      const opts = { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 };
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          applyPosition(pos.coords, !!flyTo);
+          clearLocWatch();
+          try {
+            locWatchId = navigator.geolocation.watchPosition(
+              (p2) => { applyPosition(p2.coords, false); },
+              () => {},
+              { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+            );
+            setTimeout(clearLocWatch, 12000);
+          } catch (_) {}
+          resolve(lastKnownLocation);
+        },
+        (err) => {
+          setLocateBtnState(lastKnownLocation ? 'active' : '');
+          const msg = geoErrorMessage(err);
+          console.warn('locate error', err);
+          alert(msg);
+          reject(err || new Error(msg));
+        },
+        opts
+      );
     });
   }
-
-  map.on('locationfound', onLocationFound);
-  map.on('locationerror', onLocationError);
 
   const LocateControl = L.Control.extend({
     options: { position: 'topleft' },
     onAdd: function () {
       const wrap = L.DomUtil.create('div', 'leaflet-bar locate-control');
-      const btn = L.DomUtil.create('button', 'locate-btn', wrap);
-      btn.type = 'button';
+      const btn = L.DomUtil.create('a', 'locate-btn', wrap);
+      btn.href = '#';
+      btn.setAttribute('role', 'button');
       btn.title = 'Show my location';
       btn.setAttribute('aria-label', 'Show my location');
       btn.textContent = '\u2316';
       locateBtnEl = btn;
       L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.disableScrollPropagation(wrap);
       L.DomEvent.on(btn, 'click', function (ev) {
+        L.DomEvent.preventDefault(ev);
         L.DomEvent.stop(ev);
-        requestLocation(true);
+        requestLocation(true).catch(function () {});
       });
       return wrap;
     }
@@ -656,14 +846,53 @@
         lastKnownLocation.lat.toFixed(5) + ', ' + lastKnownLocation.lon.toFixed(5);
     }
     if (lastKnownLocation) { fill(); return; }
-    const once = function () {
-      map.off('locationfound', once);
-      fill();
-    };
-    map.on('locationfound', once);
-    requestLocation(false);
+    requestLocation(false).then(fill).catch(function () {});
   }
 
+  // —— Planner sheet modes: closed | edit | pick ——
+  const appEl = document.getElementById('app');
+  function getPlannerMode() { return appEl.getAttribute('data-planner') || 'closed'; }
+  function setPlannerMode(mode) {
+    appEl.setAttribute('data-planner', mode);
+    const title = document.getElementById('plannerTitle');
+    if (title) title.textContent = mode === 'pick' ? 'Choose a route' : 'Plan trip';
+    requestAnimationFrame(function () {
+      try { map.invalidateSize(false); } catch (_) {}
+      setTimeout(function () { try { map.invalidateSize(false); } catch (_) {} }, 120);
+    });
+  }
+  function setListOpen(open) {
+    appEl.setAttribute('data-list', open ? 'open' : 'closed');
+    const btn = document.getElementById('listToggle');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const bd = document.getElementById('sideBackdrop');
+    if (bd) {
+      if (open) bd.removeAttribute('hidden');
+      else bd.setAttribute('hidden', '');
+    }
+    requestAnimationFrame(function () {
+      try { map.invalidateSize(false); } catch (_) {}
+    });
+  }
+  function updateRouteSummaryBar() {
+    const bar = document.getElementById('routeSummary');
+    if (!bar) return;
+    if (!corridorActive || selectedAlt < 0 || !altRoutes[selectedAlt] || !lastWaypoints) {
+      bar.classList.remove('has-route');
+      return;
+    }
+    const ar = altRoutes[selectedAlt];
+    const startLab = (lastWaypoints[0] && lastWaypoints[0].label) || 'Start';
+    const endLab = (lastWaypoints[lastWaypoints.length - 1] && lastWaypoints[lastWaypoints.length - 1].label) || 'End';
+    const stopN = Math.max(0, lastWaypoints.length - 2);
+    document.getElementById('sumTitle').textContent = startLab + ' → ' + endLab;
+    document.getElementById('sumMeta').textContent =
+      formatDuration(ar.duration) + ' · ' + formatMiles(ar.distance) +
+      ' · ' + stopN + ' stop' + (stopN === 1 ? '' : 's') +
+      ' · max detour ' + maxDetourMinutes() + 'm' +
+      (ar.hitCount != null ? ' · ' + ar.hitCount + ' nearby' : '');
+    bar.classList.add('has-route');
+  }
 
   const markerLayer = L.layerGroup().addTo(map);
   const routeLayer = L.layerGroup().addTo(map);
@@ -1273,8 +1502,15 @@
       `<strong>${hits.length} ${noun}</strong> within ~${maxDetourMinutes()} min est. detour of the selected drive path.<br/>${top || 'None'}`;
   }
 
-  function drawSelectedRoute(ar, waypoints) {
+  function drawSelectedRoute(ar, waypoints, opts) {
+    opts = opts || {};
     routeLayer.clearLayers();
+    if (opts.showAlts && altRoutes.length > 1) {
+      altRoutes.forEach((alt, i) => {
+        if (i === selectedAlt) return;
+        L.polyline(alt.path, { color: '#5b8def', weight: 3, opacity: 0.35, dashArray: '6 8' }).addTo(routeLayer);
+      });
+    }
     L.polyline(ar.path, { color: '#f0a500', weight: 4, opacity: 0.9 }).addTo(routeLayer);
     if (waypoints && waypoints.length) {
       waypoints.forEach((w, i) => {
@@ -1291,7 +1527,8 @@
 
   let lastWaypoints = null;
 
-  function selectRoute(idx) {
+  function selectRoute(idx, opts) {
+    opts = opts || {};
     if (idx < 0 || idx >= altRoutes.length) return;
     selectedAlt = idx;
     const ar = altRoutes[idx];
@@ -1302,10 +1539,16 @@
     // refresh stored tops for this alt
     ar.hitCount = hits.length;
     ar.topHits = hits.slice(0, 5);
-    drawSelectedRoute(ar, lastWaypoints);
+    drawSelectedRoute(ar, lastWaypoints, { showAlts: !!opts.showAlts || !!opts.fromFind });
     updateRouteResultsSummary(hits);
     renderAltList();
     render();
+    updateRouteSummaryBar();
+    if (opts.fromFind || opts.keepPick) {
+      setPlannerMode('pick');
+    } else {
+      setPlannerMode('closed');
+    }
   }
 
   async function findRoutes() {
@@ -1349,8 +1592,8 @@
       });
       status.textContent = `Found ${altRoutes.length} route option(s). Select one below.`;
       renderAltList();
-      // Auto-select first (usually fastest)
-      selectRoute(0);
+      // Preview first route; stay in pick mode so user can compare alts on the map
+      selectRoute(0, { fromFind: true, showAlts: true, keepPick: true });
     } catch (err) {
       status.textContent = String(err.message || err);
     }
@@ -1368,6 +1611,8 @@
     document.getElementById('routeStatus').textContent = '';
     document.getElementById('routeResults').textContent = '';
     document.getElementById('altList').innerHTML = '';
+    updateRouteSummaryBar();
+    setPlannerMode('closed');
   }
 
   document.getElementById('clearRouteBtn').addEventListener('click', () => { clearRoute(); render(); });
@@ -1396,7 +1641,7 @@
           });
           document.getElementById('routeStatus').textContent = `Found ${altRoutes.length} route option(s).`;
           renderAltList();
-          selectRoute(0);
+          selectRoute(0, { fromFind: true, showAlts: true, keepPick: true });
         } catch (err) {
           document.getElementById('routeStatus').textContent = String(err.message || err);
         }
@@ -1445,24 +1690,72 @@
     render();
   });
 
-  updateLegend();
-  render();
-})();
-
-  (function(){
-    var btn = 
   document.getElementById('startMyLoc').addEventListener('click', () => applyMyLocationToInput('startCity'));
   document.getElementById('endMyLoc').addEventListener('click', () => applyMyLocationToInput('endCity'));
 
-  document.getElementById('filtersToggle');
-    var header = document.querySelector('header');
-    if (btn && header) {
-      btn.addEventListener('click', function(){
-        var open = header.classList.toggle('filters-open');
-        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      });
+  const filtersToggle = document.getElementById('filtersToggle');
+  const headerEl = document.querySelector('header');
+  if (filtersToggle && headerEl) {
+    filtersToggle.addEventListener('click', function () {
+      const open = headerEl.classList.toggle('filters-open');
+      filtersToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+
+  document.getElementById('planTripBtn').addEventListener('click', () => setPlannerMode('edit'));
+  document.getElementById('sumEditBtn').addEventListener('click', () => setPlannerMode('edit'));
+  document.getElementById('sumClearBtn').addEventListener('click', () => { clearRoute(); render(); });
+  document.getElementById('plannerCloseBtn').addEventListener('click', () => setPlannerMode('closed'));
+  document.getElementById('plannerBackdrop').addEventListener('click', () => {
+    if (getPlannerMode() === 'edit') setPlannerMode('closed');
+  });
+
+  document.getElementById('listToggle').addEventListener('click', () => {
+    setListOpen(appEl.getAttribute('data-list') !== 'open');
+  });
+  document.getElementById('sideBackdrop').addEventListener('click', () => setListOpen(false));
+
+  // Legend: collapsed by default on narrow viewports; expanded on desktop
+  const legendControl = document.getElementById('legendControl');
+  const legendToggle = document.getElementById('legendToggle');
+  function syncLegendCollapse() {
+    const narrow = window.matchMedia('(max-width: 959px)').matches;
+    if (!legendControl || !legendToggle) return;
+    if (narrow) {
+      if (!legendControl.classList.contains('expanded')) {
+        legendControl.classList.add('collapsed');
+        legendToggle.setAttribute('aria-expanded', 'false');
+      }
+    } else {
+      legendControl.classList.remove('collapsed');
+      legendControl.classList.add('expanded');
+      legendToggle.setAttribute('aria-expanded', 'true');
     }
-  })();
+  }
+  if (legendToggle && legendControl) {
+    legendToggle.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      const open = !legendControl.classList.contains('expanded');
+      legendControl.classList.toggle('expanded', open);
+      legendControl.classList.toggle('collapsed', !open);
+      legendToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (ev) {
+      if (!window.matchMedia('(max-width: 959px)').matches) return;
+      if (!legendControl.classList.contains('expanded')) return;
+      if (legendControl.contains(ev.target)) return;
+      legendControl.classList.remove('expanded');
+      legendControl.classList.add('collapsed');
+      legendToggle.setAttribute('aria-expanded', 'false');
+    });
+  }
+  syncLegendCollapse();
+  window.addEventListener('resize', syncLegendCollapse);
+
+  updateLegend();
+  render();
+  updateRouteSummaryBar();
+})();
 
 </script>
 </body>
