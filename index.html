@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Trip Map"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 
-<meta name="trip-map-rev" content="planner-sheet-2026-09-18"/>
+<meta name="trip-map-rev" content="route-ux-2026-09-18"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root {
@@ -180,6 +180,45 @@
     font-size: 9px !important; max-width: 55%;
   }
   .leaflet-control-attribution a { color: var(--accent2) !important; }
+
+
+  .planner-head-actions { display: flex; align-items: center; gap: 8px; }
+  .planner-done {
+    display: none; appearance: none; cursor: pointer; font-weight: 650; font-size: .8rem;
+    border: none; border-radius: 8px; background: var(--accent2); color: #fff;
+    padding: 8px 12px; min-height: 36px;
+  }
+  #app[data-planner="pick"] .planner-done { display: inline-flex; align-items: center; }
+  .popup-actions {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+  }
+  .popup-actions button {
+    appearance: none; cursor: pointer; font-weight: 650; font-size: .75rem;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel2); color: var(--text); padding: 7px 10px; min-height: 34px;
+  }
+  .popup-actions button.primary {
+    background: var(--accent2); border-color: transparent; color: #fff;
+  }
+  .wishlist-box { margin-top: 10px; }
+  .wishlist-box h3 {
+    margin: 0 0 6px; font-size: .8rem; color: var(--accent); font-weight: 650;
+  }
+  .wish-item {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 8px; margin-bottom: 4px; color: var(--text);
+  }
+  .wish-item .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+  .wish-item .kind {
+    font-size: .65rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  }
+  .wish-item button {
+    appearance: none; cursor: pointer; background: transparent; border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; font-size: .7rem; font-weight: 650; padding: 4px 8px;
+  }
+  .route-summary .sum-title { font-size: .85rem; font-weight: 700; }
+  .route-summary .sum-meta { font-size: .72rem; color: var(--muted); margin-top: 2px; }
 
   /* Current location */
   .leaflet-bar.locate-control { border: none; box-shadow: none; background: transparent; }
@@ -540,7 +579,10 @@
   <div id="plannerSheet" role="dialog" aria-modal="true" aria-labelledby="plannerTitle">
     <div class="planner-head">
       <h2 id="plannerTitle">Plan trip</h2>
-      <button type="button" class="sheet-close" id="plannerCloseBtn" aria-label="Close planner">×</button>
+      <div class="planner-head-actions">
+        <button type="button" class="primary planner-done" id="plannerDoneBtn">Done</button>
+        <button type="button" class="sheet-close" id="plannerCloseBtn" aria-label="Close planner">×</button>
+      </div>
     </div>
     <div class="planner-body">
       <p class="planner-pick-hint">Select a route below — map shows alternatives above.</p>
@@ -555,6 +597,12 @@
             <button type="button" class="secondary" id="addStopBtn">Add</button>
           </div>
           <div class="stops-list" id="stopsList"></div>
+          <div class="wishlist-box planner-edit-only" id="wishlistBox">
+            <h3>Wishlist</h3>
+            <div id="wishlistList"></div>
+            <p class="hint" id="wishlistEmpty">Save stops from map popups — Add to route or Wishlist.</p>
+          </div>
+
           <div class="row">
             <input id="endCity" placeholder="End city, ST (e.g. Las Vegas, NV)"/>
             <button type="button" class="secondary use-loc-btn" id="endMyLoc" title="Use my current location">My loc</button>
@@ -616,7 +664,91 @@
   let corridorHits = new Set();
   let corridorPath = null; // [lat,lon][]
   let clickRoutePts = [];
-  let stops = []; // { label, lat, lon }
+  let stops = []; // { label, lat, lon, kind?, id? }
+  let wishlist = []; // { kind, id, name, lat, lon, label }
+  try {
+    wishlist = JSON.parse(localStorage.getItem('trip-map-wishlist-v1') || '[]') || [];
+    if (!Array.isArray(wishlist)) wishlist = [];
+  } catch (_) { wishlist = []; }
+  function saveWishlist() {
+    try { localStorage.setItem('trip-map-wishlist-v1', JSON.stringify(wishlist)); } catch (_) {}
+  }
+  function findPlace(kind, id) {
+    if (kind === 'poker') return rooms.find(r => String(r.id) === String(id));
+    return trails.find(t => String(t.id) === String(id));
+  }
+  function placeToStop(kind, item) {
+    const label = item.name + (item.city ? ', ' + item.city : (item.state ? ', ' + item.state : (item.location ? ' — ' + item.location : '')));
+    return {
+      label: label,
+      lat: item.lat,
+      lon: item.lon,
+      display: label,
+      kind: kind,
+      id: item.id
+    };
+  }
+  function addPlaceToRoute(kind, id) {
+    const item = findPlace(kind, id);
+    if (!item) return;
+    if (stops.some(s => String(s.id) === String(id) && s.kind === kind)) {
+      flashStatus('Already on route: ' + item.name);
+      return;
+    }
+    stops.push(placeToStop(kind, item));
+    renderStopsList();
+    flashStatus('Added to route: ' + item.name);
+    // keep planner accessible — open edit if closed so user sees stops
+    if (appEl.getAttribute('data-planner') === 'closed') {
+      setPlannerMode('edit');
+    }
+  }
+  function addPlaceToWishlist(kind, id) {
+    const item = findPlace(kind, id);
+    if (!item) return;
+    if (wishlist.some(w => String(w.id) === String(id) && w.kind === kind)) {
+      flashStatus('Already wishlisted: ' + item.name);
+      return;
+    }
+    const stop = placeToStop(kind, item);
+    wishlist.push({
+      kind: kind,
+      id: item.id,
+      name: item.name,
+      lat: item.lat,
+      lon: item.lon,
+      label: stop.label
+    });
+    saveWishlist();
+    renderWishlist();
+    flashStatus('Wishlisted: ' + item.name);
+  }
+  function flashStatus(msg) {
+    const el = document.getElementById('routeStatus');
+    if (el) el.textContent = msg;
+    try {
+      if (map && map.closePopup) { /* keep popup open */ }
+    } catch (_) {}
+  }
+  function renderWishlist() {
+    const el = document.getElementById('wishlistList');
+    const empty = document.getElementById('wishlistEmpty');
+    if (!el) return;
+    if (!wishlist.length) {
+      el.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    el.innerHTML = wishlist.map((w, i) =>
+      `<div class="wish-item" data-i="${i}">
+        <span class="kind">${w.kind === 'poker' ? '◆' : '●'}</span>
+        <span class="lab" title="${esc(w.label)}">${esc(w.name)}</span>
+        <button type="button" data-wish-act="route" data-i="${i}">Route</button>
+        <button type="button" data-wish-act="remove" data-i="${i}">✕</button>
+      </div>`
+    ).join('');
+  }
   let altRoutes = []; // computed alternatives
   let selectedAlt = -1;
   let activeListId = null;
@@ -882,15 +1014,17 @@
       return;
     }
     const ar = altRoutes[selectedAlt];
-    const startLab = (lastWaypoints[0] && lastWaypoints[0].label) || 'Start';
-    const endLab = (lastWaypoints[lastWaypoints.length - 1] && lastWaypoints[lastWaypoints.length - 1].label) || 'End';
-    const stopN = Math.max(0, lastWaypoints.length - 2);
-    document.getElementById('sumTitle').textContent = startLab + ' → ' + endLab;
+    const hits = corridorHitsForPath(ar.path);
+    let pokerN = 0, trailN = 0;
+    hits.forEach(h => {
+      if (h.kind === 'poker') pokerN++;
+      else if (h.kind === 'trails') trailN++;
+    });
+    // corridor uses kind: 'poker' | likely 'trail' — check actual
+    document.getElementById('sumTitle').textContent =
+      formatMiles(ar.distance) + ' · ' + formatDuration(ar.duration);
     document.getElementById('sumMeta').textContent =
-      formatDuration(ar.duration) + ' · ' + formatMiles(ar.distance) +
-      ' · ' + stopN + ' stop' + (stopN === 1 ? '' : 's') +
-      ' · max detour ' + maxDetourMinutes() + 'm' +
-      (ar.hitCount != null ? ' · ' + ar.hitCount + ' nearby' : '');
+      pokerN + ' poker · ' + trailN + ' trails';
     bar.classList.add('has-route');
   }
 
@@ -1127,6 +1261,10 @@
       ${addr}
       <div style="margin-top:6px">${links.join(' · ')}</div>
       <div class="src">Source: ${esc(r.tables_source || r.source || '—')} · geo: ${esc(r.geo_source || '—')}</div>
+      <div class="popup-actions">
+        <button type="button" class="primary" data-act="route" data-kind="poker" data-id="${esc(r.id)}">Add to route</button>
+        <button type="button" data-act="wish" data-kind="poker" data-id="${esc(r.id)}">Wishlist</button>
+      </div>
     </div>`;
   }
   function pokerTip(r) {
@@ -1148,6 +1286,10 @@
       ${sum}
       <div style="margin-top:6px"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open on ${esc(srcLabel)}</a></div>
       <div class="src">Source: ${esc(srcLabel)}</div>
+      <div class="popup-actions">
+        <button type="button" class="primary" data-act="route" data-kind="trails" data-id="${esc(t.id)}">Add to route</button>
+        <button type="button" data-act="wish" data-kind="trails" data-id="${esc(t.id)}">Wishlist</button>
+      </div>
     </div>`;
   }
   function trailTip(t) {
@@ -1487,7 +1629,7 @@
   document.getElementById('altList').addEventListener('click', (e) => {
     const btn = e.target.closest('.alt-opt');
     if (!btn) return;
-    selectRoute(parseInt(btn.dataset.alt, 10));
+    selectRoute(parseInt(btn.dataset.alt, 10), { keepPick: true });
   });
 
   function updateRouteResultsSummary(hits) {
@@ -1544,10 +1686,11 @@
     renderAltList();
     render();
     updateRouteSummaryBar();
-    if (opts.fromFind || opts.keepPick) {
-      setPlannerMode('pick');
-    } else {
+    // Stay in pick while comparing alts; close only when Done (closeAfter) or no alts
+    if (opts.closeAfter) {
       setPlannerMode('closed');
+    } else {
+      setPlannerMode('pick');
     }
   }
 
@@ -1705,7 +1848,47 @@
   document.getElementById('planTripBtn').addEventListener('click', () => setPlannerMode('edit'));
   document.getElementById('sumEditBtn').addEventListener('click', () => setPlannerMode('edit'));
   document.getElementById('sumClearBtn').addEventListener('click', () => { clearRoute(); render(); });
-  document.getElementById('plannerCloseBtn').addEventListener('click', () => setPlannerMode('closed'));
+  document.
+  // Popup: Add to route / Wishlist
+  document.getElementById('map').addEventListener('click', (e) => {
+    const btn = e.target.closest('.popup-actions [data-act]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const act = btn.getAttribute('data-act');
+    const kind = btn.getAttribute('data-kind');
+    const id = btn.getAttribute('data-id');
+    if (act === 'route') addPlaceToRoute(kind, id);
+    else if (act === 'wish') addPlaceToWishlist(kind, id);
+  });
+  document.getElementById('wishlistList').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-wish-act]');
+    if (!btn) return;
+    const i = parseInt(btn.getAttribute('data-i'), 10);
+    const act = btn.getAttribute('data-wish-act');
+    const w = wishlist[i];
+    if (!w) return;
+    if (act === 'remove') {
+      wishlist.splice(i, 1);
+      saveWishlist();
+      renderWishlist();
+    } else if (act === 'route') {
+      addPlaceToRoute(w.kind, w.id);
+    }
+  });
+  document.getElementById('plannerDoneBtn').addEventListener('click', () => {
+    if (selectedAlt >= 0 && altRoutes.length) {
+      selectRoute(selectedAlt, { closeAfter: true });
+    } else {
+      setPlannerMode('closed');
+    }
+  });
+  renderWishlist();
+
+  getElementById('plannerCloseBtn').addEventListener('click', () => {
+    updateRouteSummaryBar();
+    setPlannerMode('closed');
+  });
   document.getElementById('plannerBackdrop').addEventListener('click', () => {
     if (getPlannerMode() === 'edit') setPlannerMode('closed');
   });
