@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Trip Map"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 
-<meta name="trip-map-rev" content="icons-2026-09-18"/>
+<meta name="trip-map-rev" content="mobile-2026-09-18"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root {
@@ -185,12 +185,79 @@
     font-size: 9px !important; max-width: 55%;
   }
   .leaflet-control-attribution a { color: var(--accent2) !important; }
+  /* Touch-friendly defaults */
+  .tabs button, .controls button, .route-box button, .filters-toggle {
+    min-height: 40px;
+  }
+  .filters-toggle { display: none; }
+
   @media (max-width: 960px) {
-    header { padding: 8px 10px; }
+    header {
+      padding: 8px 10px;
+      padding-left: max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
+      padding-top: max(8px, env(safe-area-inset-top));
+      gap: 8px 10px;
+    }
+    header h1 { font-size: .95rem; }
     .controls { margin-left: 0; width: 100%; }
     .main { flex-direction: column; }
-    .side { flex: 0 0 auto; width: 100%; max-height: 42%; border-left: none; border-top: 1px solid var(--border); }
-    .legend { bottom: 12px; font-size: .7rem; }
+    .map-wrap { min-height: 46vh; flex: 1 1 auto; }
+    .side {
+      flex: 0 0 auto;
+      width: 100%;
+      max-height: min(40vh, 360px);
+      border-left: none;
+      border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .legend { bottom: 10px; left: 8px; font-size: .7rem; max-width: min(220px, 70vw); padding: 8px 10px; }
+    .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; }
+  }
+
+  /* Phone: collapse bulky filter row behind a toggle; prevent iOS input zoom */
+  @media (max-width: 700px) {
+    .filters-toggle {
+      display: inline-flex;
+      align-items: center;
+      margin-left: auto;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 650;
+      font-size: .8rem;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .filters-toggle[aria-expanded="true"] {
+      background: var(--accent2);
+      border-color: transparent;
+      color: #fff;
+    }
+    .controls {
+      display: none;
+      width: 100%;
+      padding-top: 4px;
+      border-top: 1px solid var(--border);
+      margin-top: 2px;
+    }
+    header.filters-open .controls { display: flex; }
+    .controls input,
+    .controls select,
+    .route-box input,
+    .route-box select {
+      font-size: 16px; /* stops iOS Safari zoom-on-focus */
+      min-height: 40px;
+    }
+    .controls input[type="search"] { width: 100%; max-width: 100%; }
+    .tab-panel { width: 100%; display: none; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; }
+    .tab-panel.active { display: flex; }
+    .stats { width: 100%; order: 5; font-size: .72rem; }
+    .map-wrap { min-height: 50vh; }
+    .side { max-height: min(38vh, 320px); }
+    .list-item { padding: 12px; }
+    .side summary { padding: 12px; min-height: 44px; }
   }
 </style>
 </head>
@@ -210,7 +277,8 @@
       </select>
     </label>
     <div class="stats" id="stats">Loading…</div>
-    <div class="controls">
+    <button type="button" class="secondary filters-toggle" id="filtersToggle" aria-expanded="false" aria-controls="headerControls">Filters</button>
+    <div class="controls" id="headerControls">
       <div class="tab-panel active" id="pokerControls">
         <label>Search
           <input type="search" id="pokerQ" placeholder="Name or city" autocomplete="off"/>
@@ -1219,6 +1287,18 @@
   updateLegend();
   render();
 })();
+
+  (function(){
+    var btn = document.getElementById('filtersToggle');
+    var header = document.querySelector('header');
+    if (btn && header) {
+      btn.addEventListener('click', function(){
+        var open = header.classList.toggle('filters-open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    }
+  })();
+
 </script>
 </body>
 </html>
