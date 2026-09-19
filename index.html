@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Trip Map"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 
-<meta name="trip-map-rev" content="mobile-2026-09-18"/>
+<meta name="trip-map-rev" content="locate-2026-09-18"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root {
@@ -185,6 +185,42 @@
     font-size: 9px !important; max-width: 55%;
   }
   .leaflet-control-attribution a { color: var(--accent2) !important; }
+
+  /* Current location */
+  .leaflet-bar.locate-control { border: none; box-shadow: none; background: transparent; }
+  .locate-btn {
+    width: 36px; height: 36px; line-height: 34px; display: block; padding: 0; margin: 0;
+    border: 2px solid rgba(0,0,0,.2); border-radius: 4px;
+    background: #fff; color: #1a2332; font-size: 18px; font-weight: 700;
+    cursor: pointer; text-align: center;
+  }
+  .locate-btn:hover { background: #f4f4f4; }
+  .locate-btn.active, .locate-btn.locating { color: #2563eb; background: #eff6ff; }
+  .locate-btn.locating { opacity: .7; }
+  .you-are-here { background: transparent !important; border: none !important; }
+  .yah-wrap { position: relative; width: 22px; height: 22px; }
+  .yah-dot {
+    position: absolute; left: 5px; top: 5px; width: 12px; height: 12px; border-radius: 50%;
+    background: #2563eb; border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(37,99,235,.45), 0 1px 4px rgba(0,0,0,.45);
+  }
+  .yah-pulse {
+    position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(37,99,235,.35); animation: yah-pulse 1.8s ease-out infinite;
+  }
+  @keyframes yah-pulse {
+    0% { transform: scale(.55); opacity: .9; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+  .legend-yah {
+    width: 12px; height: 12px; border-radius: 50%; background: #2563eb;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px #2563eb; flex-shrink: 0;
+  }
+  .use-loc-btn {
+    flex: 0 0 auto; white-space: nowrap;
+    font-size: .75rem !important; padding: 7px 10px !important;
+  }
+
   /* Touch-friendly defaults */
   .tabs button, .controls button, .route-box button, .filters-toggle {
     min-height: 40px;
@@ -351,6 +387,7 @@
           <div class="route-box">
             <div class="row">
               <input id="startCity" placeholder="Start city, ST (e.g. Los Angeles, CA)"/>
+              <button type="button" class="secondary use-loc-btn" id="startMyLoc" title="Use my current location">My loc</button>
             </div>
             <div class="row">
               <input id="stopCity" placeholder="Add stop (city or place)"/>
@@ -359,6 +396,7 @@
             <div class="stops-list" id="stopsList"></div>
             <div class="row">
               <input id="endCity" placeholder="End city, ST (e.g. Las Vegas, NV)"/>
+              <button type="button" class="secondary use-loc-btn" id="endMyLoc" title="Use my current location">My loc</button>
             </div>
             <div class="row">
               <label style="flex:0 0 auto;font-size:.72rem;color:var(--muted);display:flex;flex-direction:column;gap:2px">Max detour
@@ -516,6 +554,117 @@
     opacity: 0.9
   }).addTo(map);
 
+  // —— Current location ——
+  let locMarker = null;
+  let locCircle = null;
+  let locateBtnEl = null;
+  let lastKnownLocation = null;
+  window.__hasCurrentLocation = false;
+
+  function setLocateBtnState(state) {
+    if (!locateBtnEl) return;
+    locateBtnEl.classList.toggle('locating', state === 'locating');
+    locateBtnEl.classList.toggle('active', state === 'active');
+  }
+
+  function onLocationFound(e) {
+    const latlng = e.latlng;
+    const acc = Math.max(20, e.accuracy || 40);
+    lastKnownLocation = {
+      lat: latlng.lat,
+      lon: latlng.lng,
+      accuracy: acc,
+      label: 'My location'
+    };
+    window.__hasCurrentLocation = true;
+    if (!locMarker) {
+      locMarker = L.marker(latlng, {
+        icon: L.divIcon({
+          className: 'you-are-here',
+          html: '<div class="yah-wrap"><div class="yah-pulse"></div><div class="yah-dot"></div></div>',
+          iconSize: [22, 22],
+          iconAnchor: [11, 11]
+        }),
+        zIndexOffset: 2000
+      }).addTo(map).bindPopup('You are here');
+    } else {
+      locMarker.setLatLng(latlng);
+    }
+    if (!locCircle) {
+      locCircle = L.circle(latlng, {
+        radius: acc,
+        color: '#2563eb',
+        weight: 1,
+        opacity: 0.7,
+        fillColor: '#3b82f6',
+        fillOpacity: 0.12,
+        interactive: false
+      }).addTo(map);
+    } else {
+      locCircle.setLatLng(latlng).setRadius(acc);
+    }
+    setLocateBtnState('active');
+    updateLegend();
+  }
+
+  function onLocationError(e) {
+    setLocateBtnState(lastKnownLocation ? 'active' : '');
+    const msg = (e && e.message) ? e.message : 'Location unavailable';
+    console.warn('locate error', msg);
+    alert('Could not get your location. Allow location for this site (HTTPS) and try again.\n\n' + msg);
+  }
+
+  function requestLocation(flyTo) {
+    setLocateBtnState('locating');
+    map.locate({
+      setView: !!flyTo,
+      maxZoom: 14,
+      enableHighAccuracy: true,
+      watch: false,
+      timeout: 20000,
+      maximumAge: 10000
+    });
+  }
+
+  map.on('locationfound', onLocationFound);
+  map.on('locationerror', onLocationError);
+
+  const LocateControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      const wrap = L.DomUtil.create('div', 'leaflet-bar locate-control');
+      const btn = L.DomUtil.create('button', 'locate-btn', wrap);
+      btn.type = 'button';
+      btn.title = 'Show my location';
+      btn.setAttribute('aria-label', 'Show my location');
+      btn.textContent = '\u2316';
+      locateBtnEl = btn;
+      L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.on(btn, 'click', function (ev) {
+        L.DomEvent.stop(ev);
+        requestLocation(true);
+      });
+      return wrap;
+    }
+  });
+  map.addControl(new LocateControl());
+
+  function applyMyLocationToInput(inputId) {
+    function fill() {
+      if (!lastKnownLocation) return;
+      document.getElementById(inputId).value =
+        lastKnownLocation.lat.toFixed(5) + ', ' + lastKnownLocation.lon.toFixed(5);
+    }
+    if (lastKnownLocation) { fill(); return; }
+    const once = function () {
+      map.off('locationfound', once);
+      fill();
+    };
+    map.on('locationfound', once);
+    requestLocation(false);
+  }
+
+
   const markerLayer = L.layerGroup().addTo(map);
   const routeLayer = L.layerGroup().addTo(map);
 
@@ -549,6 +698,9 @@
       ].map(([c, lab]) =>
         `<div class="legend-row"><span class="legend-dot" style="width:14px;height:14px;background:${c};border-color:#0f1419"></span>${lab}</div>`
       ).join(''));
+    }
+    if (window.__hasCurrentLocation) {
+      bits.push('<div class="legend-row" style="margin-top:8px"><span class="legend-yah"></span>You are here</div>');
     }
     el.innerHTML = bits.join('');
   }
@@ -987,6 +1139,15 @@
 
   // —— geocode / OSRM ——
   async function geocodeCity(q) {
+    q = (q || '').trim();
+    // Allow raw coordinates: "34.05, -118.25"
+    const coord = q.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+    if (coord) {
+      return { lat: parseFloat(coord[1]), lon: parseFloat(coord[2]), label: q };
+    }
+    if (/^my location$/i.test(q) && lastKnownLocation) {
+      return { lat: lastKnownLocation.lat, lon: lastKnownLocation.lon, label: 'My location' };
+    }
     const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
       q: (q.includes('USA') || q.includes('United States')) ? q : q + ', USA',
       format: 'json',
@@ -1289,7 +1450,11 @@
 })();
 
   (function(){
-    var btn = document.getElementById('filtersToggle');
+    var btn = 
+  document.getElementById('startMyLoc').addEventListener('click', () => applyMyLocationToInput('startCity'));
+  document.getElementById('endMyLoc').addEventListener('click', () => applyMyLocationToInput('endCity'));
+
+  document.getElementById('filtersToggle');
     var header = document.querySelector('header');
     if (btn && header) {
       btn.addEventListener('click', function(){
