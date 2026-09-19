@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Trip Map — Poker Rooms + MTB Trails</title>
+<meta name="trip-map-rev" content="detour40-mintables-2026-09-18"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2332;
+    --panel2: #243044;
+    --border: #2d3a4f;
+    --text: #e8eef7;
+    --muted: #8b9bb4;
+    --accent: #3dd6c3;
+    --accent2: #5b8def;
+    --warn: #f0a500;
+    --radius: 12px;
+    --shadow: 0 8px 32px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding: 10px 14px; background: linear-gradient(180deg, #1a2332, #141c28);
+    border-bottom: 1px solid var(--border); z-index: 1000;
+  }
+  header h1 { font-size: 1.05rem; margin: 0; font-weight: 650; letter-spacing: .02em; }
+  header h1 span { color: var(--accent); }
+  .stats { color: var(--muted); font-size: .8rem; }
+  .tabs {
+    display: inline-flex; gap: 4px; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 10px; padding: 3px;
+  }
+  .tabs button {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    font-weight: 650; font-size: .85rem; padding: 7px 14px; border-radius: 8px; cursor: pointer;
+  }
+  .tabs button.active { background: var(--accent2); color: #fff; }
+  .tabs button:hover:not(.active) { color: var(--text); background: rgba(255,255,255,.04); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; margin-left: auto; }
+  .controls label { font-size: .72rem; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+  .controls input, .controls select, .controls button,
+  .route-box input, .route-box button, .route-box select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: .85rem;
+  }
+  .controls input[type="search"] { width: 150px; }
+  .controls input[type="number"] { width: 72px; }
+  .controls button, .route-box button {
+    cursor: pointer; background: var(--accent2); border-color: transparent; font-weight: 600;
+  }
+  .controls button.secondary, .route-box button.secondary {
+    background: var(--panel2); border-color: var(--border);
+  }
+  .controls button:hover, .route-box button:hover { filter: brightness(1.1); }
+  .chk-group {
+    display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+    padding: 4px 0 2px; max-width: 420px;
+  }
+  .toggle, .chk-group label.toggle {
+    flex-direction: row !important; align-items: center; gap: 5px !important;
+    font-size: .78rem !important; color: var(--text) !important; white-space: nowrap;
+  }
+  .chk-group input, .toggle input { accent-color: var(--accent); }
+  .tab-panel { display: none; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
+  .tab-panel.active { display: flex; }
+  .main {
+    flex: 1; min-height: 0; display: flex; flex-direction: row;
+    align-items: stretch;
+  }
+  .map-wrap { position: relative; flex: 1; min-width: 0; min-height: 280px; }
+  #map { position: absolute; inset: 0; background: #0a0e14; }
+  .legend {
+    position: absolute; bottom: 24px; left: 12px; z-index: 900;
+    background: rgba(26,35,50,.94); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; box-shadow: var(--shadow); font-size: .75rem; max-width: 240px;
+  }
+  .legend h3 { margin: 0 0 6px; font-size: .8rem; color: var(--accent); }
+  .legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--muted); }
+  .legend-dot { border-radius: 50%; border: 2px solid #fff; opacity: .9; flex-shrink: 0; }
+  .legend-diamond {
+    width: 12px; height: 12px; flex-shrink: 0;
+    transform: rotate(45deg);
+    border: 2px solid #0f1419;
+  }
+  .mk-icon { background: transparent !important; border: none !important; }
+  .mk-poker {
+    width: 14px; height: 14px;
+    transform: rotate(45deg);
+    border: 2px solid #0f1419;
+    box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  }
+  .mk-trail {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid #0f1419;
+    box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  }
+  .legend .note { margin-top: 8px; font-size: .7rem; line-height: 1.35; color: var(--muted); }
+  .side {
+    flex: 0 0 360px; width: 360px; z-index: 900;
+    background: var(--panel); border-left: 1px solid var(--border);
+    overflow: auto; max-height: 100%;
+    display: flex; flex-direction: column;
+  }
+  .side details { border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .side summary {
+    cursor: pointer; padding: 10px 12px; font-weight: 600; font-size: .85rem;
+    list-style: none;
+  }
+  .side summary::-webkit-details-marker { display: none; }
+  .side-body { padding: 0 12px 14px; font-size: .8rem; color: var(--muted); line-height: 1.4; }
+  .route-box { display: flex; flex-direction: column; gap: 8px; }
+  .route-box .row { display: flex; gap: 6px; }
+  .route-box .row input { flex: 1; min-width: 0; }
+  .hint { font-size: .72rem; line-height: 1.35; margin-top: 2px; }
+  .stops-list { display: flex; flex-direction: column; gap: 4px; }
+  .stop-chip {
+    display: flex; align-items: center; gap: 8px; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; color: var(--text);
+  }
+  .stop-chip .ord { color: var(--accent); font-weight: 700; min-width: 1.2em; }
+  .stop-chip .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stop-chip button {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: .85rem; padding: 2px 4px;
+  }
+  .stop-chip button:hover { color: #f87171; }
+  .alt-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .alt-opt {
+    text-align: left; cursor: pointer; width: 100%;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); padding: 9px 10px; font: inherit;
+  }
+  .alt-opt:hover { border-color: var(--accent2); }
+  .alt-opt.selected { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+  .alt-opt .t { font-weight: 700; font-size: .85rem; }
+  .alt-opt .m { font-size: .72rem; color: var(--muted); margin-top: 3px; }
+  .alt-opt .tops { font-size: .7rem; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+  .side-head {
+    padding: 10px 12px; font-weight: 600; font-size: .85rem;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .side-head .sub { font-weight: 400; color: var(--muted); font-size: .72rem; display: block; margin-top: 2px; }
+  .side-list { flex: 1; overflow: auto; padding: 6px 0 14px; min-height: 120px; }
+  .list-item {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: transparent; border: none; border-bottom: 1px solid rgba(45,58,79,.55);
+    color: var(--text); padding: 9px 12px; font: inherit;
+  }
+  .list-item:hover, .list-item.active { background: var(--panel2); }
+  .list-item .t-name { font-size: .85rem; font-weight: 600; }
+  .list-item .t-meta { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .list-item .stars { color: var(--warn); font-weight: 700; }
+  .diff-pill {
+    display: inline-block; font-size: .65rem; font-weight: 700; padding: 1px 6px;
+    border-radius: 999px; color: #0f1419; margin-left: 4px; vertical-align: middle;
+  }
+  .leaflet-popup-content-wrapper, .leaflet-tooltip {
+    background: #1a2332; color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow);
+  }
+  .leaflet-popup-tip { background: #1a2332; }
+  .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+  .popup h3 { margin: 0 0 4px; font-size: 1rem; color: var(--accent); }
+  .popup .meta { color: var(--muted); font-size: .85rem; margin-bottom: 4px; }
+  .popup .tables, .popup .stars { font-size: 1.05rem; font-weight: 700; }
+  .popup .stars { color: var(--warn); }
+  .popup a { color: var(--accent2); }
+  .popup .src { font-size: .7rem; color: var(--muted); margin-top: 8px; }
+  .leaflet-control-attribution {
+    background: rgba(15,20,25,.75) !important; color: var(--muted) !important;
+    font-size: 9px !important; max-width: 55%;
+  }
+  .leaflet-control-attribution a { color: var(--accent2) !important; }
+  @media (max-width: 960px) {
+    header { padding: 8px 10px; }
+    .controls { margin-left: 0; width: 100%; }
+    .main { flex-direction: column; }
+    .side { flex: 0 0 auto; width: 100%; max-height: 42%; border-left: none; border-top: 1px solid var(--border); }
+    .legend { bottom: 12px; font-size: .7rem; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Trip <span>Map</span></h1>
+    <div class="tabs" role="tablist">
+      <button type="button" class="active" id="tabPoker" data-tab="poker" role="tab" aria-selected="true">Poker</button>
+      <button type="button" id="tabTrails" data-tab="trails" role="tab" aria-selected="false">Trails</button>
+    </div>
+    <label style="font-size:.72rem;color:var(--muted);display:flex;flex-direction:column;gap:2px">Show on map
+      <select id="layerMode" title="Which marker layers to draw">
+        <option value="poker">Poker only</option>
+        <option value="trails">Trails only</option>
+        <option value="both">Both</option>
+      </select>
+    </label>
+    <div class="stats" id="stats">Loading…</div>
+    <div class="controls">
+      <div class="tab-panel active" id="pokerControls">
+        <label>Search
+          <input type="search" id="pokerQ" placeholder="Name or city" autocomplete="off"/>
+        </label>
+        <label>Min tables
+          <input type="number" id="minTables" min="0" step="1" value="0" placeholder="0" style="width:72px"/>
+        </label>
+        <label>Games
+          <select id="gameFilter">
+            <option value="nlh">NLH available</option>
+            <option value="all">All game types</option>
+            <option value="limit_spread">Limit / spread only</option>
+          </select>
+        </label>
+        <label class="toggle"><input type="checkbox" id="includeUnknown" checked/> Unknown table count</label>
+        <label class="toggle"><input type="checkbox" id="includeUnknownGames"/> Unknown games</label>
+        <button type="button" class="secondary" id="pokerReset">Reset</button>
+      </div>
+      <div class="tab-panel" id="trailsControls">
+        <label>Search
+          <input type="search" id="trailsQ" placeholder="Name or location" autocomplete="off"/>
+        </label>
+        <label>Min rating
+          <select id="minStars">
+            <option value="4" selected>4.0+</option>
+            <option value="4.5">4.5+</option>
+            <option value="5">5.0</option>
+          </select>
+        </label>
+        <label>Min votes
+          <input type="number" id="minVotes" min="0" step="1" value="10"/>
+        </label>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Sources</div>
+          <div class="chk-group" id="srcGroup">
+            <label class="toggle"><input type="checkbox" value="mtbproject" checked/> MTB Project</label>
+            <label class="toggle"><input type="checkbox" value="trailforks" checked/> Trailforks</label>
+            <label class="toggle"><input type="checkbox" value="other"/> Other</label>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Difficulty</div>
+          <div class="chk-group" id="diffGroup">
+            <label class="toggle"><input type="checkbox" value="blue" checked/> Blue</label>
+            <label class="toggle"><input type="checkbox" value="blueBlack" checked/> Blue/Black</label>
+            <label class="toggle"><input type="checkbox" value="black" checked/> Black</label>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Recency</div>
+          <div class="chk-group">
+            <label class="toggle" title="Trailforks trails with built/added year ≥ 2021. MTB Project archive usually has no year and will hide when this is on.">
+              <input type="checkbox" id="recentOnly"/> Added/built last 5y (TF ≥2021)
+            </label>
+          </div>
+        </div>
+        <button type="button" class="secondary" id="trailsReset">Reset</button>
+      </div>
+    </div>
+  </header>
+  <div class="main">
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="side">
+      <details open>
+        <summary>Trip / route planner</summary>
+        <div class="side-body">
+          <div class="route-box">
+            <div class="row">
+              <input id="startCity" placeholder="Start city, ST (e.g. Los Angeles, CA)"/>
+            </div>
+            <div class="row">
+              <input id="stopCity" placeholder="Add stop (city or place)"/>
+              <button type="button" class="secondary" id="addStopBtn">Add</button>
+            </div>
+            <div class="stops-list" id="stopsList"></div>
+            <div class="row">
+              <input id="endCity" placeholder="End city, ST (e.g. Las Vegas, NV)"/>
+            </div>
+            <div class="row">
+              <label style="flex:0 0 auto;font-size:.72rem;color:var(--muted);display:flex;flex-direction:column;gap:2px">Max detour
+                <input type="number" id="maxDetourMin" min="1" step="5" value="40" style="width:72px" title="Estimated extra drive time to leave the route, visit the marker, and rejoin"/>
+              </label>
+              <span class="hint" style="align-self:flex-end;padding-bottom:8px">minutes</span>
+            </div>
+            <div class="row">
+              <button type="button" id="routeBtn">Find routes</button>
+              <button type="button" class="secondary" id="clearRouteBtn">Clear route</button>
+              <button type="button" class="secondary" id="clearStopsBtn">Clear stops</button>
+            </div>
+            <p class="hint">OSRM driving with alternates. Shows markers whose <strong>estimated detour</strong> (leave route → stop → rejoin) is within your max minutes. Alt+click map sets start, then end. Stops via input above.</p>
+            <div id="routeStatus" class="hint"></div>
+            <div class="alt-list" id="altList"></div>
+            <div id="routeResults" class="hint"></div>
+          </div>
+        </div>
+      </details>
+      <div class="side-head"><span id="listTitle">Ranked</span>
+        <span class="sub" id="listSub">Click to zoom</span>
+      </div>
+      <div class="side-list" id="sideList"></div>
+      <details>
+        <summary>How to use</summary>
+        <div class="side-body">
+          <p><strong>Show on map:</strong> Poker only · Trails only · Both. <strong>◆ Diamonds</strong> = poker rooms; <strong>● Circles</strong> = trails.</p>
+          <p><strong>Poker:</strong> diamond size/color = table count; filter by minimum tables. Default games = NLH available.</p>
+          <p><strong>Trails:</strong> circle color = rating band (rose 4.0–4.3 · lime 4.4–4.7 · cyan 4.8+). Blue→black only.</p>
+          <p>Shared Esri World Dark Gray basemap (no OSM tiles). Open <code>index.html</code> via <code>file://</code>. Data: <code>data/rooms.js</code>, <code>data/trails.js</code>.</p>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="data/rooms.js"></script>
+<script src="data/trails.js"></script>
+<script>
+(function () {
+  const POKER = window.POKER_ROOMS;
+  const TRAILS = window.MTB_TRAILS;
+  if (!POKER || !POKER.rooms) {
+    document.getElementById('stats').textContent = 'Failed to load data/rooms.js';
+    return;
+  }
+  if (!TRAILS || !TRAILS.trails) {
+    document.getElementById('stats').textContent = 'Failed to load data/trails.js';
+    return;
+  }
+
+  const rooms = POKER.rooms;
+  const trails = TRAILS.trails;
+
+  let activeTab = 'poker'; // 'poker' | 'trails' — controls filters + side list
+  function layerMode() {
+    const el = document.getElementById('layerMode');
+    return (el && el.value) || 'poker';
+  }
+  function showPokerLayer() {
+    const m = layerMode();
+    return m === 'poker' || m === 'both';
+  }
+  function showTrailsLayer() {
+    const m = layerMode();
+    return m === 'trails' || m === 'both';
+  }
+  let corridorActive = false;
+  let corridorHits = new Set();
+  let corridorPath = null; // [lat,lon][]
+  let clickRoutePts = [];
+  let stops = []; // { label, lat, lon }
+  let altRoutes = []; // computed alternatives
+  let selectedAlt = -1;
+  let activeListId = null;
+  const markerById = new Map();
+
+  const BAND = {
+    '1-5':   { radius: 6,  color: '#7aa2d6', label: 'Up to 5 tables' },
+    '6-10':  { radius: 9,  color: '#5b8def', label: '6–10 tables' },
+    '11-20': { radius: 13, color: '#3dd6c3', label: '11–20 tables' },
+    '21+':   { radius: 17, color: '#f0a500', label: '21+ tables' },
+    'unknown': { radius: 5, color: '#6b7280', label: 'Unknown tables' }
+  };
+  const DIFF = {
+    blue:      { color: '#3b82f6', label: 'Blue' },
+    blueBlack: { color: '#6366f1', label: 'Blue/Black' },
+    black:     { color: '#111827', label: 'Black', border: '#e5e7eb' }
+  };
+  const DIFF_LABEL = { blue: 'Blue', blueBlack: 'Blue/Black', black: 'Black' };
+
+  function bandFor(tables) {
+    if (tables == null || tables <= 0) return 'unknown';
+    if (tables <= 5) return '1-5';
+    if (tables <= 10) return '6-10';
+    if (tables <= 20) return '11-20';
+    return '21+';
+  }
+  function radiusForTables(t) { return BAND[bandFor(t)].radius; }
+  function colorForTables(t) { return BAND[bandFor(t)].color; }
+  function ratingColor(stars) {
+    if (stars >= 4.8) return '#22d3ee';
+    if (stars >= 4.4) return '#a3e635';
+    return '#e11d48';
+  }
+  function ratingRadius(stars) {
+    if (stars >= 4.8) return 10;
+    if (stars >= 4.4) return 8;
+    return 7;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  const map = L.map('map', {
+    center: [39.5, -98.35],
+    zoom: 4,
+    minZoom: 3,
+    maxBounds: [[5, -180], [75, -40]],
+    worldCopyJump: false,
+    attributionControl: true
+  });
+
+  function fitUS() {
+    map.invalidateSize(false);
+    const legendEl = document.getElementById('legend');
+    const bottomPad = Math.max(28, (legendEl ? Math.round(legendEl.offsetHeight * 0.4) : 28));
+    map.fitBounds([[24.5, -125.0], [49.2, -66.5]], {
+      paddingTopLeft: [16, 16],
+      paddingBottomRight: [16, bottomPad],
+      maxZoom: 5,
+      animate: false
+    });
+  }
+  function scheduleFitUS() {
+    requestAnimationFrame(() => {
+      fitUS();
+      setTimeout(fitUS, 80);
+    });
+  }
+  map.whenReady(scheduleFitUS);
+  window.addEventListener('resize', () => { scheduleFitUS(); });
+
+  // Esri World Dark Gray — NOT OSM (403)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri — Esri, HERE, Garmin, FAO, NOAA, USGS',
+    maxZoom: 16
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '',
+    maxZoom: 16,
+    opacity: 0.9
+  }).addTo(map);
+
+  const markerLayer = L.layerGroup().addTo(map);
+  const routeLayer = L.layerGroup().addTo(map);
+
+  function pokerDiamondHtml(color, px) {
+    const s = px || 14;
+    return `<div class="mk-poker" style="width:${s}px;height:${s}px;background:${color}"></div>`;
+  }
+  function trailCircleHtml(color, px) {
+    const s = px || 14;
+    return `<div class="mk-trail" style="width:${s}px;height:${s}px;background:${color}"></div>`;
+  }
+
+  function updateLegend() {
+    const el = document.getElementById('legend');
+    const bits = [];
+    bits.push('<div class="note" style="margin-top:0;margin-bottom:6px"><strong>◆ Poker</strong> diamonds · <strong>● Trails</strong> circles</div>');
+    if (showPokerLayer()) {
+      bits.push('<h3>Poker · tables</h3>');
+      bits.push(['1-5', '6-10', '11-20', '21+'].map(k => {
+        const b = BAND[k];
+        return `<div class="legend-row"><span class="legend-diamond" style="background:${b.color}"></span>${b.label}</div>`;
+      }).join(''));
+      bits.push(`<div class="legend-row"><span class="legend-diamond" style="background:${BAND.unknown.color}"></span>${BAND.unknown.label}</div>`);
+    }
+    if (showTrailsLayer()) {
+      bits.push('<h3>Trails · rating</h3>');
+      bits.push([
+        ['#22d3ee', '4.8★+'],
+        ['#a3e635', '4.4–4.7★'],
+        ['#e11d48', '4.0–4.3★']
+      ].map(([c, lab]) =>
+        `<div class="legend-row"><span class="legend-dot" style="width:14px;height:14px;background:${c};border-color:#0f1419"></span>${lab}</div>`
+      ).join(''));
+    }
+    el.innerHTML = bits.join('');
+  }
+
+  // —— geometry helpers ——
+  function distToSegmentMiles(p, a, b) {
+    const latm = 69.0;
+    const lonm = Math.cos(((a[0] + b[0]) / 2) * Math.PI / 180) * 69.172;
+    const ax = a[1] * lonm, ay = a[0] * latm;
+    const bx = b[1] * lonm, by = b[0] * latm;
+    const px = p[1] * lonm, py = p[0] * latm;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(px - ax, py - ay);
+    let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+
+  /** Subsample path for faster corridor distance checks. */
+  function thinPath(path, maxPts) {
+    if (!path || path.length <= maxPts) return path || [];
+    const out = [];
+    const step = (path.length - 1) / (maxPts - 1);
+    for (let i = 0; i < maxPts; i++) {
+      out.push(path[Math.round(i * step)]);
+    }
+    return out;
+  }
+
+  function distToPolylineMiles(p, path) {
+    if (!path || path.length < 2) return Infinity;
+    let best = Infinity;
+    for (let i = 0; i < path.length - 1; i++) {
+      const d = distToSegmentMiles(p, path[i], path[i + 1]);
+      if (d < best) best = d;
+      if (best === 0) break;
+    }
+    return best;
+  }
+
+  function formatDuration(sec) {
+    if (sec == null || !isFinite(sec)) return '?';
+    const m = Math.round(sec / 60);
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    if (h <= 0) return mm + 'm';
+    return h + 'h ' + mm + 'm';
+  }
+  function formatMiles(meters) {
+    return ((meters || 0) / 1609.344).toFixed(0) + ' mi';
+  }
+
+  /** Avg access-road speed for converting off-route miles → est. round-trip detour minutes. */
+  const DETOUR_SPEED_MPH = 40;
+  function maxDetourMinutes() {
+    const v = parseInt(document.getElementById('maxDetourMin').value, 10);
+    return Number.isFinite(v) && v > 0 ? v : 40;
+  }
+  /** Geometric est.: round-trip from nearest point on the drive path to the marker. */
+  function milesToDetourMin(milesOff) {
+    return (2 * milesOff / DETOUR_SPEED_MPH) * 60;
+  }
+
+  // —— filters ——
+  function passesPokerFilters(r, ignoreCorridor) {
+    const q = document.getElementById('pokerQ').value.trim().toLowerCase();
+    const minTables = parseInt(document.getElementById('minTables').value, 10);
+    const tablesFloor = Number.isFinite(minTables) ? minTables : 0;
+    const incUnk = document.getElementById('includeUnknown').checked;
+    const gameMode = document.getElementById('gameFilter').value;
+    const incUnkGames = document.getElementById('includeUnknownGames').checked;
+
+    if (r.tables == null) {
+      if (!incUnk) return false;
+      if (tablesFloor > 0) return false;
+    } else if (r.tables < tablesFloor) {
+      return false;
+    }
+
+    const hasNlh = r.has_nlh === true;
+    const limitOnly = r.limit_only === true || (Array.isArray(r.games) && r.games.length && !hasNlh && r.games.some(g => g === 'limit' || g === 'spread'));
+    const gamesUnknown = r.has_nlh == null && r.games == null;
+    if (gameMode === 'nlh') {
+      if (hasNlh) { /* ok */ }
+      else if (gamesUnknown && incUnkGames) { /* ok */ }
+      else return false;
+      if (limitOnly) return false;
+    } else if (gameMode === 'limit_spread') {
+      if (limitOnly) { /* ok */ }
+      else if (gamesUnknown && incUnkGames) { /* ok */ }
+      else return false;
+    }
+
+    if (q) {
+      const hay = [r.name, r.city, r.state, r.address].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (!ignoreCorridor && corridorActive && !corridorHits.has(r.id)) return false;
+    return true;
+  }
+
+  function checkedValues(groupId) {
+    return [...document.querySelectorAll('#' + groupId + ' input[type=checkbox]:checked')].map(el => el.value);
+  }
+
+  function passesTrailFilters(t, ignoreCorridor) {
+    const q = document.getElementById('trailsQ').value.trim().toLowerCase();
+    const minStars = parseFloat(document.getElementById('minStars').value) || 4;
+    const minVotes = parseInt(document.getElementById('minVotes').value, 10);
+    const votesFloor = Number.isFinite(minVotes) ? minVotes : 0;
+    const sources = checkedValues('srcGroup');
+    const diffs = checkedValues('diffGroup');
+    const recentOnly = document.getElementById('recentOnly').checked;
+
+    if (t.stars < minStars) return false;
+    if ((t.votes || 0) < votesFloor) return false;
+    if (sources.length && !sources.includes(t.source)) return false;
+    if (diffs.length && !diffs.includes(t.difficulty_band)) return false;
+    // No double-black already excluded from dataset
+    if (recentOnly) {
+      const y = t.year || (t.built_or_added ? parseInt(String(t.built_or_added).slice(0, 4), 10) : 0);
+      if (!y || y < 2021) return false;
+    }
+    if (q) {
+      const hay = [t.name, t.location, t.state, t.summary].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (!ignoreCorridor && corridorActive && !corridorHits.has(t.id)) return false;
+    return true;
+  }
+
+  function filteredMarkers(ignoreCorridor) {
+    if (activeTab === 'poker') {
+      return rooms.filter(r => passesPokerFilters(r, ignoreCorridor));
+    }
+    return trails.filter(t => passesTrailFilters(t, ignoreCorridor)).sort((a, b) => {
+      if (b.stars !== a.stars) return b.stars - a.stars;
+      if (b.votes !== a.votes) return b.votes - a.votes;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  function corridorHitsForPath(path, ignoreCorridorFilters) {
+    const thin = thinPath(path, 250);
+    const maxMin = maxDetourMinutes();
+    const hits = [];
+    // Score against layers currently shown on the map
+    if (showPokerLayer()) {
+      rooms.forEach(r => {
+        if (!passesPokerFilters(r, true)) return;
+        const miles = distToPolylineMiles([r.lat, r.lon], thin);
+        const detourMin = milesToDetourMin(miles);
+        if (detourMin <= maxMin) hits.push({ item: r, d: miles, detourMin, kind: 'poker' });
+      });
+    }
+    if (showTrailsLayer()) {
+      trails.forEach(tr => {
+        if (!passesTrailFilters(tr, true)) return;
+        const miles = distToPolylineMiles([tr.lat, tr.lon], thin);
+        const detourMin = milesToDetourMin(miles);
+        if (detourMin <= maxMin) hits.push({ item: tr, d: miles, detourMin, kind: 'trails' });
+      });
+    }
+    hits.sort((a, b) => {
+      if (a.detourMin !== b.detourMin) return a.detourMin - b.detourMin;
+      const sa = a.kind === 'poker' ? (a.item.tables || 0) : (a.item.stars || 0) * 50 + (a.item.votes || 0) / 100;
+      const sb = b.kind === 'poker' ? (b.item.tables || 0) : (b.item.stars || 0) * 50 + (b.item.votes || 0) / 100;
+      return sb - sa;
+    });
+    return hits;
+  }
+
+  // —— popups ——
+  function pokerPopup(r) {
+    const tables = r.tables != null
+      ? `<div class="tables">${r.tables} tables <span style="color:var(--muted);font-size:.75rem;font-weight:500">(${bandFor(r.tables)})</span></div>`
+      : `<div class="tables" style="color:#9ca3af">Tables unknown</div>`;
+    const gamesLabel = Array.isArray(r.games) && r.games.length
+      ? r.games.map(g => ({ nlh: 'NLH', limit: 'Limit', spread: 'Spread', plo: 'PLO', mixed: 'Mixed' }[g] || g)).join(', ')
+      : (r.has_nlh === true ? 'NLH' : 'Games unknown');
+    const note = r.tables_note || (r.tables_confidence === 'directory' ? 'Approx. capacity from directory' : '');
+    const addr = r.address ? `<div>${esc(r.address)}</div>` : '';
+    const links = [];
+    if (r.url) links.push(`<a href="${esc(r.url)}" target="_blank" rel="noopener">PokerLog</a>`);
+    if (r.source_url) links.push(`<a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(r.source || 'Source')}</a>`);
+    const mapsQ = encodeURIComponent((r.address || (r.name + ', ' + (r.city || '') + ', ' + r.state)));
+    links.push(`<a href="https://www.google.com/maps/search/?api=1&query=${mapsQ}" target="_blank" rel="noopener">Maps</a>`);
+    return `<div class="popup">
+      <h3>${esc(r.name)}</h3>
+      <div class="meta">${esc([r.city, r.state].filter(Boolean).join(', '))}</div>
+      ${tables}
+      <div class="meta">Games: ${esc(gamesLabel)}</div>
+      ${note ? `<div class="meta">${esc(note)}</div>` : ''}
+      ${addr}
+      <div style="margin-top:6px">${links.join(' · ')}</div>
+      <div class="src">Source: ${esc(r.tables_source || r.source || '—')} · geo: ${esc(r.geo_source || '—')}</div>
+    </div>`;
+  }
+  function pokerTip(r) {
+    const t = r.tables != null ? `${r.tables} tables (${bandFor(r.tables)})` : 'tables unknown';
+    return `<strong>${esc(r.name)}</strong><br/>${esc([r.city, r.state].filter(Boolean).join(', '))} · ${t}`;
+  }
+  function trailPopup(t) {
+    const len = t.length_mi != null ? `${t.length_mi} mi` : 'Length n/a';
+    const srcLabel = t.source === 'mtbproject' ? 'MTB Project' : (t.source === 'trailforks' ? 'Trailforks' : 'Other');
+    const band = DIFF_LABEL[t.difficulty_band] || t.difficulty_band;
+    const sum = t.summary ? `<div class="meta" style="margin-top:6px">${esc(t.summary)}</div>` : '';
+    const y = t.year || (t.built_or_added ? String(t.built_or_added).slice(0, 4) : null);
+    const yearBit = y ? ` · added ${esc(y)}` : '';
+    return `<div class="popup">
+      <h3>${esc(t.name)}</h3>
+      <div class="meta">${esc(t.location || t.state || '')}</div>
+      <div class="stars">${t.stars.toFixed(1)}★ <span style="color:var(--muted);font-size:.8rem;font-weight:500">(${t.votes} votes)</span></div>
+      <div class="meta">${esc(band)} · ${esc(len)}${yearBit}</div>
+      ${sum}
+      <div style="margin-top:6px"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open on ${esc(srcLabel)}</a></div>
+      <div class="src">Source: ${esc(srcLabel)}</div>
+    </div>`;
+  }
+  function trailTip(t) {
+    const band = DIFF_LABEL[t.difficulty_band] || t.difficulty_band;
+    return `<strong>${esc(t.name)}</strong><br/>${t.stars.toFixed(1)}★ (${t.votes}) · ${esc(band)}`;
+  }
+
+  function renderSideList(list) {
+    const el = document.getElementById('sideList');
+    const sub = document.getElementById('listSub');
+    if (activeTab === 'poker') {
+      document.getElementById('listTitle').textContent = 'Poker rooms';
+      sub.textContent = 'Largest tables first · click to zoom';
+      const top = list.slice().sort((a, b) => (b.tables || -1) - (a.tables || -1)).slice(0, 400);
+      if (!top.length) {
+        el.innerHTML = '<div class="side-body">No rooms match current filters.</div>';
+        return;
+      }
+      el.innerHTML = top.map(r => {
+        const tbl = r.tables != null ? `${r.tables} tbl` : '? tbl';
+        return `<button type="button" class="list-item${activeListId === r.id ? ' active' : ''}" data-id="${esc(r.id)}" data-kind="poker">
+          <div class="t-name">${esc(r.name)}</div>
+          <div class="t-meta">${esc([r.city, r.state].filter(Boolean).join(', '))} · ${tbl} · ${bandFor(r.tables)}</div>
+        </button>`;
+      }).join('') + (list.length > 400 ? `<div class="side-body">Showing top 400 of ${list.length}.</div>` : '');
+    } else {
+      document.getElementById('listTitle').textContent = 'Ranked trails';
+      sub.textContent = 'Highest stars first, then most votes · click to zoom';
+      const top = list.slice(0, 400);
+      if (!top.length) {
+        el.innerHTML = '<div class="side-body">No trails match current filters.</div>';
+        return;
+      }
+      el.innerHTML = top.map(t => {
+        const d = DIFF[t.difficulty_band] || DIFF.blue;
+        const border = d.border || '#fff';
+        const pill = `<span class="diff-pill" style="background:${d.color};color:${t.difficulty_band === 'black' ? '#f9fafb' : '#0f1419'};border:1px solid ${border}">${esc(DIFF_LABEL[t.difficulty_band] || '')}</span>`;
+        return `<button type="button" class="list-item${activeListId === t.id ? ' active' : ''}" data-id="${esc(t.id)}" data-kind="trails">
+          <div class="t-name"><span class="stars">${t.stars.toFixed(1)}★</span> ${esc(t.name)}${pill}</div>
+          <div class="t-meta">${t.votes} votes · ${esc(t.location || t.state || '')} · ${esc(t.source)}${t.year ? ' · ' + t.year : ''}</div>
+        </button>`;
+      }).join('') + (list.length > 400 ? `<div class="side-body">Showing top 400 of ${list.length}.</div>` : '');
+    }
+  }
+
+  function focusItem(id) {
+    activeListId = id;
+    let item = null;
+    if (activeTab === 'poker') item = rooms.find(x => x.id === id);
+    else item = trails.find(x => x.id === id);
+    if (!item) return;
+    map.setView([item.lat, item.lon], Math.max(map.getZoom(), 11), { animate: true });
+    const key = (activeTab === 'poker' ? 'poker:' : 'trails:') + id;
+    const m = markerById.get(key);
+    if (m) m.openPopup();
+    renderSideList(filteredMarkers(false));
+  }
+
+  document.getElementById('sideList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.list-item');
+    if (!btn) return;
+    focusItem(btn.dataset.id);
+  });
+
+  function pokerIcon(r) {
+    const fill = colorForTables(r.tables);
+    const px = Math.max(10, Math.min(22, radiusForTables(r.tables) * 1.6));
+    return L.divIcon({
+      className: 'mk-icon',
+      html: pokerDiamondHtml(fill, px),
+      iconSize: [px + 4, px + 4],
+      iconAnchor: [(px + 4) / 2, (px + 4) / 2]
+    });
+  }
+  function trailIcon(tr) {
+    const fill = ratingColor(tr.stars);
+    const px = Math.max(10, Math.min(20, ratingRadius(tr.stars) * 1.5));
+    return L.divIcon({
+      className: 'mk-icon',
+      html: trailCircleHtml(fill, px),
+      iconSize: [px + 4, px + 4],
+      iconAnchor: [(px + 4) / 2, (px + 4) / 2]
+    });
+  }
+
+  function render() {
+    const list = filteredMarkers(false); // side list = active tab
+    markerLayer.clearLayers();
+    markerById.clear();
+
+    let pokerN = 0, trailN = 0;
+
+    if (showPokerLayer()) {
+      const pokerList = rooms.filter(r => passesPokerFilters(r, false));
+      pokerN = pokerList.length;
+      pokerList.forEach(r => {
+        const m = L.marker([r.lat, r.lon], {
+          icon: pokerIcon(r),
+          zIndexOffset: 200 + (r.tables || 0)
+        });
+        m.bindTooltip('◆ ' + pokerTip(r), { sticky: true, opacity: 0.95 });
+        m.bindPopup(pokerPopup(r), { maxWidth: 300 });
+        m.on('click', () => {
+          if (activeTab !== 'poker') setTab('poker');
+          activeListId = r.id;
+          renderSideList(filteredMarkers(false));
+        });
+        m.addTo(markerLayer);
+        markerById.set('poker:' + r.id, m);
+      });
+    }
+
+    if (showTrailsLayer()) {
+      const trailList = trails.filter(tr => passesTrailFilters(tr, false)).sort((a, b) => {
+        if (a.stars !== b.stars) return a.stars - b.stars;
+        return a.votes - b.votes;
+      });
+      trailN = trailList.length;
+      trailList.forEach(tr => {
+        const m = L.marker([tr.lat, tr.lon], {
+          icon: trailIcon(tr),
+          zIndexOffset: Math.round(tr.stars * 100 + (tr.votes || 0) / 10)
+        });
+        m.bindTooltip('● ' + trailTip(tr), { sticky: true, direction: 'top', opacity: 0.95 });
+        m.bindPopup(trailPopup(tr), { maxWidth: 300 });
+        m.on('click', () => {
+          if (activeTab !== 'trails') setTab('trails');
+          activeListId = tr.id;
+          renderSideList(filteredMarkers(false));
+        });
+        m.addTo(markerLayer);
+        markerById.set('trails:' + tr.id, m);
+      });
+    }
+
+    const mode = layerMode();
+    const parts = [];
+    if (mode === 'poker' || mode === 'both') parts.push(`${pokerN.toLocaleString()} poker ◆`);
+    if (mode === 'trails' || mode === 'both') parts.push(`${trailN.toLocaleString()} trails ●`);
+    document.getElementById('stats').textContent = parts.join(' · ') + ` · editing ${activeTab} filters`;
+
+    updateLegend();
+    renderSideList(list);
+  }
+
+  // —— tabs ——
+  function setTab(tab, opts) {
+    opts = opts || {};
+    activeTab = tab;
+    document.getElementById('tabPoker').classList.toggle('active', tab === 'poker');
+    document.getElementById('tabTrails').classList.toggle('active', tab === 'trails');
+    document.getElementById('tabPoker').setAttribute('aria-selected', tab === 'poker' ? 'true' : 'false');
+    document.getElementById('tabTrails').setAttribute('aria-selected', tab === 'trails' ? 'true' : 'false');
+    document.getElementById('pokerControls').classList.toggle('active', tab === 'poker');
+    document.getElementById('trailsControls').classList.toggle('active', tab === 'trails');
+    activeListId = null;
+    // If showing only one layer, follow the tab; keep "both" as-is
+    if (!opts.fromLayer && layerMode() !== 'both') {
+      document.getElementById('layerMode').value = tab;
+    }
+    updateLegend();
+    // Recompute corridor hits for new tab if a route is active
+    if (corridorActive && corridorPath) {
+      const hits = corridorHitsForPath(corridorPath);
+      corridorHits = new Set(hits.map(h => h.item.id));
+      updateRouteResultsSummary(hits);
+      // Refresh alt option counts for new tab
+      if (altRoutes.length) {
+        altRoutes = altRoutes.map(ar => {
+          const h = corridorHitsForPath(ar.path);
+          return Object.assign({}, ar, {
+            hitCount: h.length,
+            topHits: h.slice(0, 5)
+          });
+        });
+        renderAltList();
+      }
+    }
+    render();
+  }
+  document.getElementById('tabPoker').addEventListener('click', () => setTab('poker'));
+  document.getElementById('tabTrails').addEventListener('click', () => setTab('trails'));
+  document.getElementById('maxDetourMin').addEventListener('change', () => {
+    if (!corridorActive || !corridorPath) return;
+    const hits = corridorHitsForPath(corridorPath);
+    corridorHits = new Set(hits.map(h => h.item.id));
+    updateRouteResultsSummary(hits);
+    if (altRoutes.length) {
+      altRoutes = altRoutes.map(ar => {
+        const h = corridorHitsForPath(ar.path);
+        return Object.assign({}, ar, { hitCount: h.length, topHits: h.slice(0, 5) });
+      });
+      renderAltList();
+    }
+    render();
+  });
+  document.getElementById('maxDetourMin').addEventListener('input', () => {
+    // live re-filter while dragging/typing if a route is already selected
+    if (!corridorActive || !corridorPath) return;
+    const hits = corridorHitsForPath(corridorPath);
+    corridorHits = new Set(hits.map(h => h.item.id));
+    updateRouteResultsSummary(hits);
+    if (altRoutes.length) {
+      altRoutes = altRoutes.map(ar => {
+        const h = corridorHitsForPath(ar.path);
+        return Object.assign({}, ar, { hitCount: h.length, topHits: h.slice(0, 5) });
+      });
+      renderAltList();
+    }
+    render();
+  });
+  document.getElementById('layerMode').addEventListener('change', () => {
+    const m = layerMode();
+    // Keep filter panel useful: if exclusive layer, switch editing tab to match
+    if (m === 'poker' || m === 'trails') setTab(m, { fromLayer: true });
+    else { updateLegend(); render(); }
+  });
+
+  // —— geocode / OSRM ——
+  async function geocodeCity(q) {
+    const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+      q: (q.includes('USA') || q.includes('United States')) ? q : q + ', USA',
+      format: 'json',
+      limit: '1',
+      countrycodes: 'us'
+    });
+    const res = await fetch(url, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) throw new Error('Geocoder error');
+    const data = await res.json();
+    if (!data || !data.length) throw new Error('Not found: ' + q);
+    return {
+      lat: parseFloat(data[0].lat),
+      lon: parseFloat(data[0].lon),
+      label: data[0].display_name || q
+    };
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  /**
+   * OSRM public demo: alternatives=true typically returns the primary route
+   * plus up to ~2 alternates. alternatives=N is accepted by some builds;
+   * we request alternatives=3 (falls back to fewer when the demo graph has no distinct alts).
+   */
+  async function fetchDrivingRoutes(waypoints) {
+    // waypoints: [{lat,lon}, ...] in order
+    const coords = waypoints.map(w => `${w.lon},${w.lat}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&alternatives=3&steps=false&annotations=false`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Routing failed (' + res.status + ')');
+    const data = await res.json();
+    if (data.code !== 'Ok' || !data.routes || !data.routes.length) {
+      throw new Error(data.message || 'No driving route found');
+    }
+    return data.routes.map((rt, idx) => {
+      const path = rt.geometry.coordinates.map(c => [c[1], c[0]]);
+      return {
+        index: idx,
+        path,
+        duration: rt.duration,
+        distance: rt.distance,
+        hitCount: 0,
+        topHits: []
+      };
+    });
+  }
+
+  function renderStopsList() {
+    const el = document.getElementById('stopsList');
+    if (!stops.length) {
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = stops.map((s, i) =>
+      `<div class="stop-chip"><span class="ord">${i + 1}</span><span class="lab" title="${esc(s.label)}">${esc(s.label)}</span><button type="button" data-i="${i}" aria-label="Remove stop">✕</button></div>`
+    ).join('');
+  }
+  document.getElementById('stopsList').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-i]');
+    if (!btn) return;
+    stops.splice(parseInt(btn.dataset.i, 10), 1);
+    renderStopsList();
+  });
+  document.getElementById('addStopBtn').addEventListener('click', async () => {
+    const q = document.getElementById('stopCity').value.trim();
+    if (!q) return;
+    document.getElementById('routeStatus').textContent = 'Geocoding stop…';
+    try {
+      const g = await geocodeCity(q);
+      stops.push({ label: q, lat: g.lat, lon: g.lon, display: g.label });
+      document.getElementById('stopCity').value = '';
+      renderStopsList();
+      document.getElementById('routeStatus').textContent = `Added stop: ${q}`;
+    } catch (err) {
+      document.getElementById('routeStatus').textContent = String(err.message || err);
+    }
+  });
+  document.getElementById('clearStopsBtn').addEventListener('click', () => {
+    stops = [];
+    renderStopsList();
+    document.getElementById('routeStatus').textContent = 'Stops cleared';
+  });
+
+  function renderAltList() {
+    const el = document.getElementById('altList');
+    if (!altRoutes.length) {
+      el.innerHTML = '';
+      return;
+    }
+    const noun = (showPokerLayer() && showTrailsLayer()) ? 'stops' : (showPokerLayer() ? 'rooms' : 'trails');
+    el.innerHTML = altRoutes.map((ar, i) => {
+      const tops = (ar.topHits || []).slice(0, 4).map(h => {
+        const dm = h.detourMin != null ? ` · ~${Math.round(h.detourMin)}m` : '';
+        if (h.kind === 'poker') {
+          return `${h.item.name} (${h.item.tables != null ? h.item.tables + ' tbl' : '?'}${dm})`;
+        }
+        return `${h.item.name} (${h.item.stars.toFixed(1)}★${dm})`;
+      }).join(' · ');
+      return `<button type="button" class="alt-opt${selectedAlt === i ? ' selected' : ''}" data-alt="${i}">
+        <div class="t">Route ${i + 1} · ${formatDuration(ar.duration)} · ${formatMiles(ar.distance)}</div>
+        <div class="m"><strong>${ar.hitCount}</strong> ${noun} within ~${maxDetourMinutes()} min detour</div>
+        ${tops ? `<div class="tops">${esc(tops)}</div>` : ''}
+      </button>`;
+    }).join('');
+  }
+  document.getElementById('altList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.alt-opt');
+    if (!btn) return;
+    selectRoute(parseInt(btn.dataset.alt, 10));
+  });
+
+  function updateRouteResultsSummary(hits) {
+    const noun = (showPokerLayer() && showTrailsLayer()) ? 'stops' : (showPokerLayer() ? 'rooms' : 'trails');
+    const top = hits.slice(0, 10).map(h => {
+      if (h.kind === 'poker') {
+        return `${h.item.name} (${h.item.tables != null ? h.item.tables + ' tbl' : '?'}) · ~${Math.round(h.detourMin)} min detour`;
+      }
+      return `${h.item.name} (${h.item.stars.toFixed(1)}★) · ~${Math.round(h.detourMin)} min detour`;
+    }).join('<br/>');
+    document.getElementById('routeResults').innerHTML =
+      `<strong>${hits.length} ${noun}</strong> within ~${maxDetourMinutes()} min est. detour of the selected drive path.<br/>${top || 'None'}`;
+  }
+
+  function drawSelectedRoute(ar, waypoints) {
+    routeLayer.clearLayers();
+    L.polyline(ar.path, { color: '#f0a500', weight: 4, opacity: 0.9 }).addTo(routeLayer);
+    if (waypoints && waypoints.length) {
+      waypoints.forEach((w, i) => {
+        const isStart = i === 0;
+        const isEnd = i === waypoints.length - 1;
+        const fill = isStart ? '#22c55e' : (isEnd ? '#ef4444' : '#5b8def');
+        const tip = isStart ? 'Start' : (isEnd ? 'End' : 'Stop ' + i);
+        L.circleMarker([w.lat, w.lon], { radius: 7, color: '#fff', fillColor: fill, fillOpacity: 1 })
+          .addTo(routeLayer).bindTooltip(tip);
+      });
+    }
+    map.fitBounds(L.latLngBounds(ar.path).pad(0.2));
+  }
+
+  let lastWaypoints = null;
+
+  function selectRoute(idx) {
+    if (idx < 0 || idx >= altRoutes.length) return;
+    selectedAlt = idx;
+    const ar = altRoutes[idx];
+    corridorPath = ar.path;
+    const hits = corridorHitsForPath(ar.path);
+    corridorActive = true;
+    corridorHits = new Set(hits.map(h => h.item.id));
+    // refresh stored tops for this alt
+    ar.hitCount = hits.length;
+    ar.topHits = hits.slice(0, 5);
+    drawSelectedRoute(ar, lastWaypoints);
+    updateRouteResultsSummary(hits);
+    renderAltList();
+    render();
+  }
+
+  async function findRoutes() {
+    const s = document.getElementById('startCity').value.trim();
+    const e = document.getElementById('endCity').value.trim();
+    if (!s || !e) {
+      alert('Enter start and end cities');
+      return;
+    }
+    const status = document.getElementById('routeStatus');
+    status.textContent = 'Geocoding start…';
+    document.getElementById('routeResults').textContent = '';
+    document.getElementById('altList').innerHTML = '';
+    try {
+      const start = await geocodeCity(s);
+      await sleep(1100);
+      const mid = [];
+      for (let i = 0; i < stops.length; i++) {
+        // Stops already geocoded when added; reuse coords
+        mid.push({ lat: stops[i].lat, lon: stops[i].lon, label: stops[i].label });
+      }
+      // Also allow typed stop that wasn't added — ignore; use stops list
+      status.textContent = 'Geocoding end…';
+      const end = await geocodeCity(e);
+      const waypoints = [
+        { lat: start.lat, lon: start.lon, label: s },
+        ...mid,
+        { lat: end.lat, lon: end.lon, label: e }
+      ];
+      lastWaypoints = waypoints;
+      status.textContent = 'Fetching OSRM routes (with alternatives)…';
+      const routes = await fetchDrivingRoutes(waypoints);
+      // Score each route against active-tab filtered markers
+      status.textContent = `Scoring ${routes.length} route(s) against ${activeTab} markers…`;
+      altRoutes = routes.map(ar => {
+        const hits = corridorHitsForPath(ar.path);
+        return Object.assign({}, ar, {
+          hitCount: hits.length,
+          topHits: hits.slice(0, 5)
+        });
+      });
+      status.textContent = `Found ${altRoutes.length} route option(s). Select one below.`;
+      renderAltList();
+      // Auto-select first (usually fastest)
+      selectRoute(0);
+    } catch (err) {
+      status.textContent = String(err.message || err);
+    }
+  }
+
+  function clearRoute() {
+    corridorActive = false;
+    corridorHits = new Set();
+    corridorPath = null;
+    clickRoutePts = [];
+    altRoutes = [];
+    selectedAlt = -1;
+    lastWaypoints = null;
+    routeLayer.clearLayers();
+    document.getElementById('routeStatus').textContent = '';
+    document.getElementById('routeResults').textContent = '';
+    document.getElementById('altList').innerHTML = '';
+  }
+
+  document.getElementById('clearRouteBtn').addEventListener('click', () => { clearRoute(); render(); });
+  document.getElementById('routeBtn').addEventListener('click', () => { findRoutes(); });
+
+  map.on('click', (ev) => {
+    if (!ev.originalEvent.altKey) return;
+    clickRoutePts.push({ lat: ev.latlng.lat, lon: ev.latlng.lng });
+    if (clickRoutePts.length === 1) {
+      routeLayer.clearLayers();
+      L.circleMarker([clickRoutePts[0].lat, clickRoutePts[0].lon], {
+        radius: 7, color: '#fff', fillColor: '#22c55e', fillOpacity: 1
+      }).addTo(routeLayer).bindTooltip('Start (Alt+click end)');
+      document.getElementById('routeStatus').textContent = 'Start set — Alt+click the end point';
+    } else if (clickRoutePts.length >= 2) {
+      const a = clickRoutePts[0], b = clickRoutePts[1];
+      clickRoutePts = [];
+      lastWaypoints = [a, ...stops.map(s => ({ lat: s.lat, lon: s.lon, label: s.label })), b];
+      (async () => {
+        document.getElementById('routeStatus').textContent = 'Fetching OSRM routes…';
+        try {
+          const routes = await fetchDrivingRoutes(lastWaypoints);
+          altRoutes = routes.map(ar => {
+            const hits = corridorHitsForPath(ar.path);
+            return Object.assign({}, ar, { hitCount: hits.length, topHits: hits.slice(0, 5) });
+          });
+          document.getElementById('routeStatus').textContent = `Found ${altRoutes.length} route option(s).`;
+          renderAltList();
+          selectRoute(0);
+        } catch (err) {
+          document.getElementById('routeStatus').textContent = String(err.message || err);
+        }
+      })();
+    }
+  });
+
+  // —— filter listeners ——
+  ['pokerQ', 'minTables', 'gameFilter', 'includeUnknown', 'includeUnknownGames'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', render);
+    el.addEventListener('change', render);
+  });
+  ['trailsQ', 'minStars', 'minVotes'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', render);
+    el.addEventListener('change', render);
+  });
+  document.querySelectorAll('#srcGroup input, #diffGroup input').forEach(el => {
+    el.addEventListener('change', render);
+  });
+  document.getElementById('recentOnly').addEventListener('change', render);
+
+  document.getElementById('pokerReset').addEventListener('click', () => {
+    document.getElementById('pokerQ').value = '';
+    document.getElementById('minTables').value = '0';
+    document.getElementById('gameFilter').value = 'nlh';
+    document.getElementById('includeUnknown').checked = true;
+    document.getElementById('includeUnknownGames').checked = false;
+    clearRoute();
+    scheduleFitUS();
+    render();
+  });
+  document.getElementById('trailsReset').addEventListener('click', () => {
+    document.getElementById('trailsQ').value = '';
+    document.getElementById('minStars').value = '4';
+    document.getElementById('minVotes').value = '10';
+    document.getElementById('recentOnly').checked = false;
+    document.querySelectorAll('#srcGroup input').forEach(el => {
+      el.checked = (el.value === 'mtbproject' || el.value === 'trailforks');
+    });
+    document.querySelectorAll('#diffGroup input').forEach(el => { el.checked = true; });
+    activeListId = null;
+    clearRoute();
+    scheduleFitUS();
+    render();
+  });
+
+  updateLegend();
+  render();
+})();
+</script>
+</body>
+</html>
