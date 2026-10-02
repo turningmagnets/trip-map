@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Trip Map"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 
-<meta name="trip-map-rev" content="route-ux-2026-09-18"/>
+<meta name="trip-map-rev" content="trail-coverage-blueblack-2026-10-02"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root {
@@ -68,7 +68,7 @@
   .controls button:hover, .route-box button:hover { filter: brightness(1.1); }
   .chk-group {
     display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
-    padding: 4px 0 2px; max-width: 420px;
+    padding: 4px 0 2px; max-width: 720px;
   }
   .toggle, .chk-group label.toggle {
     flex-direction: row !important; align-items: center; gap: 5px !important;
@@ -334,6 +334,19 @@
   #app[data-planner="edit"] #plannerSheet,
   #app[data-planner="pick"] #plannerSheet { display: flex; }
   #app[data-planner="edit"] #plannerSheet { top: 0; max-height: 100%; }
+  @media (min-width: 960px) {
+    #app[data-planner="edit"] #plannerSheet {
+      top: 5vh;
+      bottom: auto;
+      left: 50%;
+      right: auto;
+      width: min(640px, 94vw);
+      transform: translateX(-50%);
+      max-height: 90vh;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+  }
   #app[data-planner="pick"] #plannerSheet {
     top: auto; height: 42%; max-height: 48vh; min-height: 220px;
   }
@@ -767,6 +780,14 @@
     black:     { color: '#111827', label: 'Black', border: '#e5e7eb' }
   };
   const DIFF_LABEL = { blue: 'Blue', blueBlack: 'Blue/Black', black: 'Black' };
+  const SRC_LABEL = {
+    mtbproject: 'MTB Project',
+    trailforks: 'Trailforks'
+  };
+  function hasStars(t) {
+    return t && t.stars != null && t.stars !== '' && isFinite(Number(t.stars));
+  }
+  function starValue(t) { return hasStars(t) ? Number(t.stars) : null; }
 
   function bandFor(tables) {
     if (tables == null || tables <= 0) return 'unknown';
@@ -778,14 +799,18 @@
   function radiusForTables(t) { return BAND[bandFor(t)].radius; }
   function colorForTables(t) { return BAND[bandFor(t)].color; }
   function ratingColor(stars) {
+    if (stars == null || !isFinite(Number(stars))) return '#94a3b8';
+    stars = Number(stars);
     if (stars >= 4.8) return '#22d3ee';
     if (stars >= 4.4) return '#a3e635';
     return '#e11d48';
   }
   function ratingRadius(stars) {
-    if (stars >= 4.8) return 10;
-    if (stars >= 4.4) return 8;
-    return 7;
+    if (stars == null || !isFinite(Number(stars))) return 6;
+    stars = Number(stars);
+    if (stars >= 4.8) return 8;
+    if (stars >= 4.4) return 7;
+    return 6;
   }
 
   function esc(s) {
@@ -799,7 +824,8 @@
     minZoom: 3,
     maxBounds: [[5, -180], [75, -40]],
     worldCopyJump: false,
-    attributionControl: true
+    attributionControl: true,
+    preferCanvas: true
   });
 
   function fitUS() {
@@ -832,6 +858,7 @@
     maxZoom: 16,
     opacity: 0.9
   }).addTo(map);
+  map.attributionControl.addAttribution('Trails: MTB Project · Trailforks');
 
   // —— Current location (navigator.geolocation — not Leaflet map.locate) ——
   let locMarker = null;
@@ -1179,7 +1206,7 @@
     const diffs = checkedValues('diffGroup');
     const recentOnly = document.getElementById('recentOnly').checked;
 
-    if (t.stars < minStars) return false;
+    if ((t.stars || 0) < minStars) return false;
     if ((t.votes || 0) < votesFloor) return false;
     if (sources.length && !sources.includes(t.source)) return false;
     if (diffs.length && !diffs.includes(t.difficulty_band)) return false;
@@ -1201,8 +1228,11 @@
       return rooms.filter(r => passesPokerFilters(r, ignoreCorridor));
     }
     return trails.filter(t => passesTrailFilters(t, ignoreCorridor)).sort((a, b) => {
-      if (b.stars !== a.stars) return b.stars - a.stars;
-      if (b.votes !== a.votes) return b.votes - a.votes;
+      const as = starValue(a), bs = starValue(b);
+      if (as == null && bs != null) return 1;
+      if (bs == null && as != null) return -1;
+      if (as != null && bs != null && bs !== as) return bs - as;
+      if ((b.votes || 0) !== (a.votes || 0)) return (b.votes || 0) - (a.votes || 0);
       return a.name.localeCompare(b.name);
     });
   }
@@ -1271,21 +1301,33 @@
     const t = r.tables != null ? `${r.tables} tables (${bandFor(r.tables)})` : 'tables unknown';
     return `<strong>${esc(r.name)}</strong><br/>${esc([r.city, r.state].filter(Boolean).join(', '))} · ${t}`;
   }
+  function sourceLabel(src) {
+    return SRC_LABEL[src] || (src ? String(src) : 'Other');
+  }
+  function starsHtml(t) {
+    if (!hasStars(t)) return '<div class="stars">Unrated</div>';
+    const votes = t.votes == null ? 'no vote count' : (t.votes + ' votes');
+    return `<div class="stars">${Number(t.stars).toFixed(1)}★ <span style="color:var(--muted);font-size:.8rem;font-weight:500">(${esc(votes)})</span></div>`;
+  }
   function trailPopup(t) {
     const len = t.length_mi != null ? `${t.length_mi} mi` : 'Length n/a';
-    const srcLabel = t.source === 'mtbproject' ? 'MTB Project' : (t.source === 'trailforks' ? 'Trailforks' : 'Other');
-    const band = DIFF_LABEL[t.difficulty_band] || t.difficulty_band;
+    const srcLabel = sourceLabel(t.source);
+    const band = DIFF_LABEL[t.difficulty_band] || t.difficulty_band || 'Difficulty n/a';
     const sum = t.summary ? `<div class="meta" style="margin-top:6px">${esc(t.summary)}</div>` : '';
     const y = t.year || (t.built_or_added ? String(t.built_or_added).slice(0, 4) : null);
     const yearBit = y ? ` · added ${esc(y)}` : '';
+    const link = t.url ? `<div style="margin-top:6px"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open on ${esc(srcLabel)}</a></div>` : '';
+    const geoBit = t.geo_source ? ` · coordinates: ${esc(t.geo_source)}` : '';
+    const rateBit = (t.rating_source && t.rating_source !== t.source)
+      ? ` · rating: ${esc(sourceLabel(t.rating_source))}` : '';
     return `<div class="popup">
       <h3>${esc(t.name)}</h3>
       <div class="meta">${esc(t.location || t.state || '')}</div>
-      <div class="stars">${t.stars.toFixed(1)}★ <span style="color:var(--muted);font-size:.8rem;font-weight:500">(${t.votes} votes)</span></div>
+      ${starsHtml(t)}
       <div class="meta">${esc(band)} · ${esc(len)}${yearBit}</div>
       ${sum}
-      <div style="margin-top:6px"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open on ${esc(srcLabel)}</a></div>
-      <div class="src">Source: ${esc(srcLabel)}</div>
+      ${link}
+      <div class="src">Source: ${esc(srcLabel)}${rateBit}${geoBit}</div>
       <div class="popup-actions">
         <button type="button" class="primary" data-act="route" data-kind="trails" data-id="${esc(t.id)}">Add to route</button>
         <button type="button" data-act="wish" data-kind="trails" data-id="${esc(t.id)}">Wishlist</button>
@@ -1293,8 +1335,11 @@
     </div>`;
   }
   function trailTip(t) {
-    const band = DIFF_LABEL[t.difficulty_band] || t.difficulty_band;
-    return `<strong>${esc(t.name)}</strong><br/>${t.stars.toFixed(1)}★ (${t.votes}) · ${esc(band)}`;
+    const band = DIFF_LABEL[t.difficulty_band] || t.difficulty_band || '';
+    const stars = hasStars(t)
+      ? `${Number(t.stars).toFixed(1)}★ (${t.votes == null ? '—' : t.votes})`
+      : 'Unrated';
+    return `<strong>${esc(t.name)}</strong><br/>${stars}${band ? ' · ' + esc(band) : ''}`;
   }
 
   function renderSideList(list) {
@@ -1324,12 +1369,16 @@
         return;
       }
       el.innerHTML = top.map(t => {
-        const d = DIFF[t.difficulty_band] || DIFF.blue;
-        const border = d.border || '#fff';
-        const pill = `<span class="diff-pill" style="background:${d.color};color:${t.difficulty_band === 'black' ? '#f9fafb' : '#0f1419'};border:1px solid ${border}">${esc(DIFF_LABEL[t.difficulty_band] || '')}</span>`;
+        const d = DIFF[t.difficulty_band];
+        const light = t.difficulty_band === 'black' || t.difficulty_band === 'doubleBlack';
+        const pill = d
+          ? `<span class="diff-pill" style="background:${d.color};color:${light ? '#f9fafb' : '#0f1419'};border:1px solid ${d.border || '#fff'}">${esc(d.label)}</span>`
+          : '';
+        const starBit = hasStars(t) ? `${Number(t.stars).toFixed(1)}★` : 'Unrated';
+        const voteBit = t.votes == null ? '' : `${t.votes} votes · `;
         return `<button type="button" class="list-item${activeListId === t.id ? ' active' : ''}" data-id="${esc(t.id)}" data-kind="trails">
-          <div class="t-name"><span class="stars">${t.stars.toFixed(1)}★</span> ${esc(t.name)}${pill}</div>
-          <div class="t-meta">${t.votes} votes · ${esc(t.location || t.state || '')} · ${esc(t.source)}${t.year ? ' · ' + t.year : ''}</div>
+          <div class="t-name"><span class="stars">${starBit}</span> ${esc(t.name)}${pill}</div>
+          <div class="t-meta">${voteBit}${esc(t.location || t.state || '')} · ${esc(sourceLabel(t.source))}${t.year ? ' · ' + t.year : ''}</div>
         </button>`;
       }).join('') + (list.length > 400 ? `<div class="side-body">Showing top 400 of ${list.length}.</div>` : '');
     }
@@ -1404,14 +1453,20 @@
 
     if (showTrailsLayer()) {
       const trailList = trails.filter(tr => passesTrailFilters(tr, false)).sort((a, b) => {
-        if (a.stars !== b.stars) return a.stars - b.stars;
-        return a.votes - b.votes;
+        const as = starValue(a), bs = starValue(b);
+        if (as == null && bs != null) return -1;
+        if (bs == null && as != null) return 1;
+        if (as != null && bs != null && as !== bs) return as - bs;
+        return (a.votes || 0) - (b.votes || 0);
       });
       trailN = trailList.length;
       trailList.forEach(tr => {
-        const m = L.marker([tr.lat, tr.lon], {
-          icon: trailIcon(tr),
-          zIndexOffset: Math.round(tr.stars * 100 + (tr.votes || 0) / 10)
+        const m = L.circleMarker([tr.lat, tr.lon], {
+          radius: ratingRadius(tr.stars),
+          color: '#0f1419',
+          weight: 1.5,
+          fillColor: ratingColor(tr.stars),
+          fillOpacity: 0.92
         });
         m.bindTooltip('● ' + trailTip(tr), { sticky: true, direction: 'top', opacity: 0.95 });
         m.bindPopup(trailPopup(tr), { maxWidth: 300 });
@@ -1617,7 +1672,8 @@
         if (h.kind === 'poker') {
           return `${h.item.name} (${h.item.tables != null ? h.item.tables + ' tbl' : '?'}${dm})`;
         }
-        return `${h.item.name} (${h.item.stars.toFixed(1)}★${dm})`;
+        const starBit = hasStars(h.item) ? `${Number(h.item.stars).toFixed(1)}★` : 'unrated';
+        return `${h.item.name} (${starBit}${dm})`;
       }).join(' · ');
       return `<button type="button" class="alt-opt${selectedAlt === i ? ' selected' : ''}" data-alt="${i}">
         <div class="t">Route ${i + 1} · ${formatDuration(ar.duration)} · ${formatMiles(ar.distance)}</div>
@@ -1638,7 +1694,8 @@
       if (h.kind === 'poker') {
         return `${h.item.name} (${h.item.tables != null ? h.item.tables + ' tbl' : '?'}) · ~${Math.round(h.detourMin)} min detour`;
       }
-      return `${h.item.name} (${h.item.stars.toFixed(1)}★) · ~${Math.round(h.detourMin)} min detour`;
+      const starBit = hasStars(h.item) ? `${Number(h.item.stars).toFixed(1)}★` : 'unrated';
+      return `${h.item.name} (${starBit}) · ~${Math.round(h.detourMin)} min detour`;
     }).join('<br/>');
     document.getElementById('routeResults').innerHTML =
       `<strong>${hits.length} ${noun}</strong> within ~${maxDetourMinutes()} min est. detour of the selected drive path.<br/>${top || 'None'}`;
@@ -1848,7 +1905,6 @@
   document.getElementById('planTripBtn').addEventListener('click', () => setPlannerMode('edit'));
   document.getElementById('sumEditBtn').addEventListener('click', () => setPlannerMode('edit'));
   document.getElementById('sumClearBtn').addEventListener('click', () => { clearRoute(); render(); });
-  document.
   // Popup: Add to route / Wishlist
   document.getElementById('map').addEventListener('click', (e) => {
     const btn = e.target.closest('.popup-actions [data-act]');
@@ -1885,12 +1941,20 @@
   });
   renderWishlist();
 
-  getElementById('plannerCloseBtn').addEventListener('click', () => {
+  function closePlanner() {
     updateRouteSummaryBar();
     setPlannerMode('closed');
-  });
+  }
+  document.getElementById('plannerCloseBtn').addEventListener('click', closePlanner);
   document.getElementById('plannerBackdrop').addEventListener('click', () => {
-    if (getPlannerMode() === 'edit') setPlannerMode('closed');
+    if (getPlannerMode() === 'edit') closePlanner();
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    const mode = getPlannerMode();
+    if (mode !== 'edit' && mode !== 'pick') return;
+    ev.preventDefault();
+    closePlanner();
   });
 
   document.getElementById('listToggle').addEventListener('click', () => {
