@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Rebuild data/trails.js with broader MTB coverage.
+"""Rebuild data/trails.js inside the blue-to-black, 4.0+ constraint.
 
-Sources (see SOURCES.md):
-- MTB Project archive already used by this map (sgreylewis/mtb-trail-finder
-  US_trails_half_step.csv). The previous file kept only blue–black trails
-  rated 4.0+. This rebuild keeps every archived trail rated 4.5+ (any
-  difficulty, including easy and double-black), other archived trails rated
-  4.0+, and well-reviewed 3.5+ trails.
-- Trailforks records already shipped in data/trails.js (not re-crawled;
-  Trailforks' data policy allows reuse only through their API).
-- OpenStreetMap route=mtb relations (ODbL), plus named mtb:scale ways when
-  those extracts are present in the cache directory.
-- Kenosha County GIS purpose-built mountain bike trails (Silver Lake Park
-  and Petrifying Springs). Star ratings are attached only when a public
-  MTB Project trail page was fetched into the ratings cache.
+The map lists only blue, blue/black, and black trails rated 4.0 or higher.
+This script starts from the 2026-09-18 dataset (git main) and adds qualifying
+trails that pipeline was dropping:
+
+- Archive rows (US_trails_half_step.csv) that are blue–black and ★≥4, are not
+  connectors, and are not the same trail as a Trailforks point already on the
+  map (normalized name + coordinates rounded to 0.001°).
+- Public MTB Project pages in the ratings cache that meet the same rule and
+  are missing from the 2018 archive. County difficulty labels are not used.
+
+Trailforks is not re-crawled. OpenStreetMap geometries are not copied: they
+have no star rating, so they fail the 4.0 floor.
 """
 
 from __future__ import annotations
@@ -529,81 +528,174 @@ def attach_ratings(county, ratings):
     return county + extras
 
 
-def from_csv():
+
+QUAL_BANDS = {"blue", "blueBlack", "black"}
+PLACEHOLDER_SUMMARY = {"needs summary", "to be written"}
+
+
+def load_baseline():
+    """The constrained dataset on main, before this branch widened it."""
+    import subprocess
+    raw = subprocess.check_output(
+        ["git", "show", "main:data/trails.js"], cwd=ROOT
+    ).decode("utf-8")
+    payload = raw.split("=", 1)[1].strip()
+    if payload.endswith(";"):
+        payload = payload[:-1]
+    return json.loads(payload)
+
+
+def tf_match_keys(trails):
+    """Name + coordinates rounded to 0.001° (~100 m). This is the key that
+    accounts for the archive rows missing from the baseline MTB set."""
+    keys = set()
+    for trail in trails:
+        if trail.get("source") != "trailforks":
+            continue
+        keys.add((
+            norm_name(trail.get("name")),
+            round(float(trail["lat"]), 3),
+            round(float(trail["lon"]), 3),
+        ))
+    return keys
+
+
+def _votes(raw):
+    try:
+        return int(float(raw or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _summary(text):
+    summary = (text or "").replace("\n", " ").strip()
+    if summary.lower() in PLACEHOLDER_SUMMARY:
+        return ""
+    return summary
+
+
+def scan_archive(baseline_ids, tf_keys):
+    """Classify every archive row. Add only blue–black ★≥4 trails that are
+    not connectors and not already represented."""
     ensure_csv()
-    out = []
+    drops = Counter()
+    added = []
     with CSV_PATH.open(newline="", encoding="utf-8", errors="replace") as fh:
         for row in csv.DictReader(fh):
+            band = band_for(row.get("difficulty"))
             stars = fnum(row.get("stars")) or 0
-            try:
-                votes = int(float(row.get("starVotes") or 0))
-            except ValueError:
-                votes = 0
-            if row.get("type") == "Connector" and stars < 4.0:
+            if band not in QUAL_BANDS:
+                drops["difficulty_outside_blue_black"] += 1
                 continue
-            if stars >= 4.0 or (stars >= 3.5 and votes >= 10):
-                pass
-            else:
+            if stars < 4.0:
+                drops["blue_black_stars_below_4"] += 1
+                continue
+            drops["qualifying_archive"] += 1
+            if (row.get("type") or "") == "Connector":
+                drops["connector"] += 1
                 continue
             lat, lon = fnum(row.get("latitude")), fnum(row.get("longitude"))
             if lat is None or lon is None:
+                drops["missing_coordinates"] += 1
                 continue
-            band = band_for(row.get("difficulty"))
-            if row.get("difficulty") in ("missing", "", None) and not band:
+            tid = f"mtb-{row['id']}"
+            if tid in baseline_ids:
+                drops["already_on_baseline"] += 1
                 continue
-            state = (row.get("State") or "").strip().lower()
+            key = (norm_name(row.get("name")), round(lat, 3), round(lon, 3))
+            if key in tf_keys:
+                drops["deduped_trailforks"] += 1
+                continue
             length = fnum(row.get("length"))
-            summary = (row.get("summary") or "").replace("\n", " ").strip()
-            out.append({
-                "id": f"mtb-{row['id']}",
+            added.append({
+                "id": tid,
                 "name": (row.get("name") or "").strip(),
                 "lat": round(lat, 5),
                 "lon": round(lon, 5),
-                "stars": round(stars, 1),
-                "votes": votes,
+                "stars": round(float(stars), 1),
+                "votes": _votes(row.get("starVotes")),
                 "difficulty": band,
                 "difficulty_band": band,
                 "length_mi": round(length, 2) if length is not None else None,
                 "location": (row.get("location") or "").strip(),
-                "state": state,
+                "state": (row.get("State") or "").strip().lower(),
                 "source": "mtbproject",
                 "url": (row.get("url") or "").strip() or f"https://www.mtbproject.com/trail/{row['id']}",
-                "summary": summary or None,
+                "summary": _summary(row.get("summary")),
                 "year": None,
                 "built_or_added": None,
             })
-    return out
+            drops["archive_gap_added"] += 1
+    return added, drops
 
 
-def dedup_same_name(records, miles):
-    """Drop same-name copies that sit on top of each other. Keeps the most-reviewed."""
-    ordered = sorted(
-        records,
-        key=lambda r: (-(r.get("votes") or 0), -(r.get("stars") or 0), r.get("name") or ""),
-    )
-    idx = SpatialIndex()
-    kept = []
-    for trail in ordered:
-        n = norm_name(trail.get("name"))
-        if any(norm_name(o.get("name")) == n for o in idx.near(trail["lat"], trail["lon"], miles)):
+def supplemental_pages(existing_ids):
+    """MTB Project pages fetched for Silver Lake. Include only blue–black ★≥4."""
+    drops = Counter()
+    excluded = []
+    added = []
+    lengths = []
+    try:
+        lengths = fetch_kenosha()
+    except Exception as exc:
+        print(f"county length lookup skipped: {exc}")
+    for rec in load_ratings():
+        band = band_for(rec.get("difficulty"))
+        stars = fnum(rec.get("stars")) or 0
+        votes = _votes(rec.get("votes"))
+        name = (rec.get("name") or "").strip()
+        match = re.search(r"/trail/(\d+)/", rec.get("url") or "")
+        tid = f"mtb-{match.group(1)}" if match else None
+        lat, lon = fnum(rec.get("lat")), fnum(rec.get("lon"))
+        detail = {
+            "name": name,
+            "stars": stars,
+            "votes": votes,
+            "difficulty": band or rec.get("difficulty"),
+        }
+        if band not in QUAL_BANDS:
+            drops["page_difficulty_outside_blue_black"] += 1
+            excluded.append(detail)
             continue
-        kept.append(trail)
-        idx.add(trail)
-    return kept
-
-
-def drop_osm_already_represented(osm, others):
-    idx = SpatialIndex()
-    for trail in others:
-        idx.add(trail)
-    kept = []
-    for trail in osm:
-        n = norm_name(trail["name"])
-        near = idx.near(trail["lat"], trail["lon"], 1.2)
-        if any(names_match(n, o.get("name") or "") for o in near):
+        if stars < 4.0:
+            drops["page_stars_below_4"] += 1
+            excluded.append(detail)
             continue
-        kept.append(trail)
-    return kept
+        if lat is None or lon is None or not tid:
+            drops["page_unusable"] += 1
+            continue
+        if tid in existing_ids:
+            drops["page_already_present"] += 1
+            continue
+        length = None
+        for county in lengths:
+            if not names_match(name, county.get("name") or ""):
+                continue
+            if hav_miles(lat, lon, county["lat"], county["lon"]) > 1.5:
+                continue
+            length = county.get("length_mi")
+            break
+        added.append({
+            "id": tid,
+            "name": name,
+            "lat": round(float(lat), 5),
+            "lon": round(float(lon), 5),
+            "stars": round(float(stars), 1),
+            "votes": votes,
+            "difficulty": band,
+            "difficulty_band": band,
+            "length_mi": length,
+            "location": "Salem Lakes, Wisconsin",
+            "state": "wisconsin",
+            "source": "mtbproject",
+            "url": rec.get("url"),
+            "summary": _summary(rec.get("summary")),
+            "year": None,
+            "built_or_added": None,
+        })
+        existing_ids.add(tid)
+        drops["stale_extract_added"] += 1
+    return added, drops, excluded
 
 
 def compact(trail):
@@ -635,70 +727,89 @@ def compact(trail):
 
 def main():
     started = time.time()
-    previous = load_json_assign(TRAILS_JS)
-    trailforks = [t for t in previous["trails"] if t.get("source") == "trailforks"]
-    trailforks = dedup_same_name(trailforks, 0.08)
-    print(f"trailforks kept {len(trailforks)} (from {sum(1 for t in previous['trails'] if t.get('source')=='trailforks')})")
+    baseline = load_baseline()
+    base = baseline["trails"]
+    outside = [
+        t for t in base
+        if t.get("difficulty_band") not in QUAL_BANDS or (t.get("stars") or 0) < 4
+    ]
+    if outside:
+        raise SystemExit(f"baseline has {len(outside)} trails outside blue–black ★≥4")
 
-    mtb = dedup_same_name(from_csv(), 0.08)
-    print(f"mtbproject archive included {len(mtb)}")
-
-    ratings = load_ratings()
-    print(f"mtbproject page ratings cached {len(ratings)}")
-    county = attach_ratings(fetch_kenosha(), ratings)
-    # If the archive already has this id, prefer the county geometry + fresh rating.
-    county_ids = {t["id"] for t in county}
-    mtb = [t for t in mtb if t["id"] not in county_ids]
-    print(f"county/park trails {len(county)}")
-
-    represented = trailforks + mtb + county
-    osm = drop_osm_already_represented(load_osm_routes(), represented)
-    osm = dedup_same_name(osm, 0.4)
-    print(f"openstreetmap added {len(osm)}")
-
-    trails = [compact(t) for t in (mtb + trailforks + county + osm)]
-    # Stable order: rated first, then name.
+    ids = {t["id"] for t in base}
+    archive_added, archive_drops = scan_archive(ids, tf_match_keys(base))
+    for trail in archive_added:
+        ids.add(trail["id"])
+    page_added, page_drops, excluded_pages = supplemental_pages(ids)
+    trails = [compact(t) for t in (base + archive_added + page_added)]
     trails.sort(key=lambda t: (
-        0 if t.get("stars") is not None else 1,
         -(t.get("stars") or 0),
         -(t.get("votes") or 0),
         t["name"].lower(),
         t["id"],
     ))
 
+    bad = [
+        t for t in trails
+        if t.get("difficulty_band") not in QUAL_BANDS or (t.get("stars") or 0) < 4
+    ]
+    if bad:
+        raise SystemExit(f"output has {len(bad)} trails outside the constraint")
+
     sources = Counter(t["source"] for t in trails)
     bands = Counter(t.get("difficulty_band") or "unknown" for t in trails)
     star_bands = Counter()
     for t in trails:
-        s = t.get("stars")
-        if s is None:
-            star_bands["unrated"] += 1
-        elif s >= 5:
+        s = t.get("stars") or 0
+        if s >= 5:
             star_bands["5.0"] += 1
         elif s >= 4.5:
             star_bands["4.5–4.99"] += 1
         elif s >= 4:
             star_bands["4.0–4.49"] += 1
-        elif s >= 3.5:
-            star_bands["3.5–3.99"] += 1
         else:
-            star_bands["below 3.5"] += 1
+            star_bands["below 4.0"] += 1
 
+    drops_before = {
+        "connector_exclusion": archive_drops["connector"],
+        "deduped_same_name_within_0.001deg_of_trailforks": archive_drops["deduped_trailforks"],
+        "archive_row_not_on_map": archive_drops["archive_gap_added"],
+        "stale_extract_verified_silver_lake_pages": page_drops["stale_extract_added"],
+    }
+    # After this build those archive gaps and the verified Silver Lake pages are included.
+    drops_after = {
+        "connector_exclusion": archive_drops["connector"],
+        "deduped_same_name_within_0.001deg_of_trailforks": archive_drops["deduped_trailforks"],
+        "archive_row_not_on_map": 0,
+        "stale_extract_verified_silver_lake_pages": 0,
+    }
     payload = {
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "timezone_note": "UTC build; previous file used America/Los_Angeles",
         "sources": {
-            "mtbproject": "sgreylewis/mtb-trail-finder US_trails_half_step.csv (MTB Project API archive) plus public trail pages for Kenosha County parks",
-            "trailforks": "Records already in this map. Not re-crawled; Trailforks data policy requires their API.",
-            "openstreetmap": "OSM route=mtb relations and named mtb:scale ways, © OpenStreetMap contributors, ODbL",
-            "county": "Kenosha County GIS AllTrails public feature service (purpose-built mountain bike trails)",
+            "mtbproject": "sgreylewis/mtb-trail-finder US_trails_half_step.csv (committed 2018-01-23) plus public MTB Project trail pages for Silver Lake County Park trails that postdate that archive",
+            "trailforks": "Records already on the 2026-09-18 map. Not re-crawled; Trailforks data policy requires their API.",
         },
         "filters_applied": {
-            "archive_include": "stars>=4.5 any difficulty; stars>=4.0 any difficulty; stars>=3.5 with >=10 votes; connectors only if stars>=4.0",
-            "excluded_from_archive": "stars<3.5, unrated (0-star) archive rows, missing coordinates",
-            "ui_defaults": "min stars 4.0; min votes 5 only below 4.5; 4.5+ always shown; unrated shown; all difficulties",
+            "stars_min": 4.0,
+            "difficulty": ["black", "blue", "blueBlack"],
+            "excluded": ["doubleBlack", "dblack", "proline", "green", "greenBlue", "white", "connectors"],
         },
-        "note_coverage": "The 2026-09-18 file dropped easy, easy/intermediate, and double-black trails and anything under 4.0 stars, and the MTB Project archive itself has no Silver Lake County Park (Salem Lakes) trails. Those are filled from Kenosha County GIS, with MTB Project ratings where a trail page was fetched.",
+        "note_onewheel": "Double-black / proline excluded — not Onewheel-rideable for this map.",
+        "coverage_audit": {
+            "baseline_count": len(base),
+            "qualifying_archive_blue_black_stars_gte_4": archive_drops["qualifying_archive"],
+            "drops_before": drops_before,
+            "drops_after": drops_after,
+            "added_archive_gaps": [t["name"] for t in archive_added],
+            "added_stale_extract": [
+                {"name": t["name"], "stars": t["stars"], "votes": t["votes"], "difficulty": t["difficulty_band"]}
+                for t in page_added
+            ],
+            "silver_lake_pages_excluded_by_constraint": excluded_pages,
+            "archive_rows_outside_difficulty": archive_drops["difficulty_outside_blue_black"],
+            "archive_blue_black_below_4": archive_drops["blue_black_stars_below_4"],
+        },
         "sources_count": dict(sources),
         "difficulty_count": dict(bands),
         "star_band_count": dict(star_bands),
@@ -707,12 +818,15 @@ def main():
     text = "window.MTB_TRAILS = " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ";\n"
     TRAILS_JS.write_text(text, encoding="utf-8")
     print(f"wrote {len(trails)} trails ({TRAILS_JS.stat().st_size/1e6:.1f} MB) in {time.time()-started:.1f}s")
+    print("baseline", len(base), "added archive", len(archive_added), "added pages", len(page_added))
     print("sources", dict(sources))
-    print("stars", dict(star_bands))
     print("difficulty", dict(bands))
-
-    def box(lat0, lon0, lat1, lon1):
-        return [t for t in trails if lat0 <= t["lat"] <= lat1 and lon0 <= t["lon"] <= lon1]
+    print("stars", dict(star_bands))
+    print("drops_before", json.dumps(drops_before))
+    print("drops_after", json.dumps(drops_after))
+    print("archive outside difficulty", archive_drops["difficulty_outside_blue_black"], "blue-black below 4", archive_drops["blue_black_stars_below_4"])
+    print("excluded silver lake pages", excluded_pages)
+    print("added", [(t["name"], t["stars"], t["votes"], t["difficulty_band"], t["length_mi"]) for t in archive_added + page_added])
 
     regions = {
         "silver_lake_park": (42.545, -88.155, 42.570, -88.120),
@@ -723,16 +837,15 @@ def main():
         "copper_harbor": (47.42, -87.95, 47.50, -87.80),
         "pisgah": (35.15, -82.85, 35.45, -82.55),
     }
-    prev = previous["trails"]
-    print("\nregion before -> after")
+    print("\nregion baseline -> after (4.5+ in the new box)")
     for name, (a, b, c, d) in regions.items():
-        old = [t for t in prev if a <= t["lat"] <= c and b <= t["lon"] <= d]
-        new = box(a, b, c, d)
-        rated = sum(1 for t in new if t.get("stars") is not None and t["stars"] >= 4.5)
-        print(f"  {name:20} {len(old):5} -> {len(new):5}  (4.5+ in box {rated})")
-        if name == "silver_lake_park":
-            for t in sorted(new, key=lambda r: r["name"].lower()):
-                print(f"    {t.get('stars')} {t.get('votes')} {t.get('difficulty_band')} {t['source']:16} {t['name']}")
+        old = [t for t in base if a <= t["lat"] <= c and b <= t["lon"] <= d]
+        new = [t for t in trails if a <= t["lat"] <= c and b <= t["lon"] <= d]
+        hi = sum(1 for t in new if (t.get("stars") or 0) >= 4.5)
+        print(f"  {name:20} {len(old):5} -> {len(new):5}  (4.5+ {hi})")
+        if name in ("silver_lake_park", "salem_lakes"):
+            for t in sorted(new, key=lambda r: -(r.get("stars") or 0)):
+                print(f"    {t.get('stars')} v{t.get('votes')} {t.get('difficulty_band')} {t['source']:12} {t['name']} | {t.get('location')}")
 
 
 if __name__ == "__main__":

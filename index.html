@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Trip Map"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 
-<meta name="trip-map-rev" content="trail-coverage-2026-10-02"/>
+<meta name="trip-map-rev" content="trail-coverage-blueblack-2026-10-02"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 <style>
   :root {
@@ -511,43 +511,34 @@
         </label>
         <label>Min rating
           <select id="minStars">
-            <option value="3.5">3.5+</option>
             <option value="4" selected>4.0+</option>
             <option value="4.5">4.5+</option>
             <option value="5">5.0</option>
           </select>
         </label>
         <label>Min votes
-          <input type="number" id="minVotes" min="0" step="1" value="5" title="Applies to trails under 4.5 stars. 4.5★ and above stay visible. Unrated trails ignore this."/>
+          <input type="number" id="minVotes" min="0" step="1" value="10"/>
         </label>
         <div>
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Sources</div>
           <div class="chk-group" id="srcGroup">
             <label class="toggle"><input type="checkbox" value="mtbproject" checked/> MTB Project</label>
             <label class="toggle"><input type="checkbox" value="trailforks" checked/> Trailforks</label>
-            <label class="toggle"><input type="checkbox" value="openstreetmap" checked/> OpenStreetMap</label>
-            <label class="toggle"><input type="checkbox" value="county" checked/> County / park</label>
             <label class="toggle"><input type="checkbox" value="other"/> Other</label>
           </div>
         </div>
         <div>
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Difficulty</div>
           <div class="chk-group" id="diffGroup">
-            <label class="toggle"><input type="checkbox" value="green" checked/> Easy</label>
-            <label class="toggle"><input type="checkbox" value="greenBlue" checked/> Easy/Int</label>
             <label class="toggle"><input type="checkbox" value="blue" checked/> Blue</label>
             <label class="toggle"><input type="checkbox" value="blueBlack" checked/> Blue/Black</label>
             <label class="toggle"><input type="checkbox" value="black" checked/> Black</label>
-            <label class="toggle"><input type="checkbox" value="doubleBlack" checked/> Dbl black</label>
           </div>
         </div>
         <div>
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Recency</div>
           <div class="chk-group">
-            <label class="toggle" title="Show trails with no star rating (OpenStreetMap routes and county trails that were never rated on MTB Project or Trailforks).">
-              <input type="checkbox" id="includeUnrated" checked/> Include unrated
-            </label>
-            <label class="toggle" title="Trailforks trails with built/added year ≥ 2021. Other sources usually have no year and will hide when this is on.">
+            <label class="toggle" title="Trailforks trails with built/added year ≥ 2021. MTB Project archive usually has no year and will hide when this is on.">
               <input type="checkbox" id="recentOnly"/> Added/built last 5y (TF ≥2021)
             </label>
           </div>
@@ -589,7 +580,7 @@
         <div class="side-body">
           <p><strong>Show on map:</strong> Poker only · Trails only · Both. <strong>◆ Diamonds</strong> = poker rooms; <strong>● Circles</strong> = trails.</p>
           <p><strong>Poker:</strong> diamond size/color = table count; filter by minimum tables. Default games = NLH available.</p>
-          <p><strong>Trails:</strong> circle color = rating band (rose 4.0–4.3 · lime 4.4–4.7 · cyan 4.8+ · gray unrated). Easy through double-black. 4.5★+ stays on the map even with few votes.</p>
+          <p><strong>Trails:</strong> circle color = rating band (rose 4.0–4.3 · lime 4.4–4.7 · cyan 4.8+). Blue→black only.</p>
           <p>Shared Esri World Dark Gray basemap (no OSM tiles). Open <code>index.html</code> via <code>file://</code>. Data: <code>data/rooms.js</code>, <code>data/trails.js</code>.</p>
         </div>
       </details>
@@ -784,22 +775,14 @@
     'unknown': { radius: 5, color: '#6b7280', label: 'Unknown tables' }
   };
   const DIFF = {
-    green:       { color: '#22c55e', label: 'Easy' },
-    greenBlue:   { color: '#84cc16', label: 'Easy/Int' },
-    blue:        { color: '#3b82f6', label: 'Blue' },
-    blueBlack:   { color: '#6366f1', label: 'Blue/Black' },
-    black:       { color: '#111827', label: 'Black', border: '#e5e7eb' },
-    doubleBlack: { color: '#7f1d1d', label: 'Dbl Black', border: '#fecaca' }
+    blue:      { color: '#3b82f6', label: 'Blue' },
+    blueBlack: { color: '#6366f1', label: 'Blue/Black' },
+    black:     { color: '#111827', label: 'Black', border: '#e5e7eb' }
   };
-  const DIFF_LABEL = {
-    green: 'Easy', greenBlue: 'Easy/Int', blue: 'Blue', blueBlack: 'Blue/Black',
-    black: 'Black', doubleBlack: 'Dbl Black'
-  };
+  const DIFF_LABEL = { blue: 'Blue', blueBlack: 'Blue/Black', black: 'Black' };
   const SRC_LABEL = {
     mtbproject: 'MTB Project',
-    trailforks: 'Trailforks',
-    openstreetmap: 'OpenStreetMap',
-    county: 'County / park GIS'
+    trailforks: 'Trailforks'
   };
   function hasStars(t) {
     return t && t.stars != null && t.stars !== '' && isFinite(Number(t.stars));
@@ -875,7 +858,7 @@
     maxZoom: 16,
     opacity: 0.9
   }).addTo(map);
-  map.attributionControl.addAttribution('Trails © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Kenosha County GIS · MTB Project · Trailforks');
+  map.attributionControl.addAttribution('Trails: MTB Project · Trailforks');
 
   // —— Current location (navigator.geolocation — not Leaflet map.locate) ——
   let locMarker = null;
@@ -1101,8 +1084,7 @@
       bits.push([
         ['#22d3ee', '4.8★+'],
         ['#a3e635', '4.4–4.7★'],
-        ['#e11d48', '4.0–4.3★'],
-        ['#94a3b8', 'Unrated']
+        ['#e11d48', '4.0–4.3★']
       ].map(([c, lab]) =>
         `<div class="legend-row"><span class="legend-dot" style="width:14px;height:14px;background:${c};border-color:#0f1419"></span>${lab}</div>`
       ).join(''));
@@ -1224,18 +1206,10 @@
     const diffs = checkedValues('diffGroup');
     const recentOnly = document.getElementById('recentOnly').checked;
 
-    const unrated = !hasStars(t);
-    const includeUnrated = document.getElementById('includeUnrated').checked;
-    if (unrated) {
-      if (!includeUnrated) return false;
-    } else {
-      const stars = starValue(t);
-      if (stars < minStars) return false;
-      // 4.5★ and above stay visible even when they have few reviews.
-      if (stars < 4.5 && (t.votes || 0) < votesFloor) return false;
-    }
+    if ((t.stars || 0) < minStars) return false;
+    if ((t.votes || 0) < votesFloor) return false;
     if (sources.length && !sources.includes(t.source)) return false;
-    if (diffs.length && t.difficulty_band && !diffs.includes(t.difficulty_band)) return false;
+    if (diffs.length && !diffs.includes(t.difficulty_band)) return false;
     // No double-black already excluded from dataset
     if (recentOnly) {
       const y = t.year || (t.built_or_added ? parseInt(String(t.built_or_added).slice(0, 4), 10) : 0);
@@ -1890,7 +1864,6 @@
     el.addEventListener('change', render);
   });
   document.getElementById('recentOnly').addEventListener('change', render);
-  document.getElementById('includeUnrated').addEventListener('change', render);
 
   document.getElementById('pokerReset').addEventListener('click', () => {
     document.getElementById('pokerQ').value = '';
@@ -1905,11 +1878,10 @@
   document.getElementById('trailsReset').addEventListener('click', () => {
     document.getElementById('trailsQ').value = '';
     document.getElementById('minStars').value = '4';
-    document.getElementById('minVotes').value = '5';
+    document.getElementById('minVotes').value = '10';
     document.getElementById('recentOnly').checked = false;
-    document.getElementById('includeUnrated').checked = true;
     document.querySelectorAll('#srcGroup input').forEach(el => {
-      el.checked = el.value !== 'other';
+      el.checked = (el.value === 'mtbproject' || el.value === 'trailforks');
     });
     document.querySelectorAll('#diffGroup input').forEach(el => { el.checked = true; });
     activeListId = null;

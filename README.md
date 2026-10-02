@@ -20,7 +20,7 @@ Box copy: `/workspace/trip-map/`
 | Tab | Markers / legend | Filters (no state filter) |
 |-----|------------------|---------------------------|
 | **Poker** | Size bands ≤5 / 6–10 / 11–20 / 21+ | Size band, games (NLH default / all / limit-spread), search, unknown tables, unknown games |
-| **Trails** | Rating colors: rose 4.0–4.3 · lime 4.4–4.7 · cyan 4.8+ · gray unrated (no numbers on map) | Sources (MTB Project, Trailforks, OpenStreetMap, county/park), min votes (does not hide 4.5★+), difficulty easy through double-black, min stars, unrated toggle, last-5y toggle, search |
+| **Trails** | Rating colors: rose 4.0–4.3 · lime 4.4–4.7 · cyan 4.8+ (no numbers on map) | Sources (MTB Project, Trailforks), min votes (default 10), difficulty blue / blue-black / black, min stars (default 4.0), last-5y toggle, search |
 
 Switching tabs swaps markers, filters, legend, and side list. Shared basemap + trip planner stay put.
 
@@ -41,7 +41,7 @@ Corridor counts respect the **current tab’s filters**.
 | Dataset | Loaded |
 |---------|--------|
 | Poker rooms (`data/rooms.js`) | **434** (318 with table counts) |
-| MTB trails (`data/trails.js`) | **22,980** (mtbproject 10,436 · trailforks 3,286 · openstreetmap 9,236 · county 22). Includes easy through double-black. Every archived trail rated 4.5★+ is included, plus OpenStreetMap MTB routes and Kenosha County park trails. |
+| MTB trails (`data/trails.js`) | **10,261** (mtbproject 6,974 · trailforks 3,287). Blue, blue/black, and black only, all ★≥4.0. |
 
 ## Basemap
 
