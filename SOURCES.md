@@ -42,7 +42,9 @@ Rebuild with `python3 scripts/build_trails.py` (uses cached downloads under `/tm
 | Copper Harbor, MI | 21 | 78 | 13 |
 | Pisgah / Brevard, NC | 70 | 86 | 30 |
 
-Silver Lake trails now on the map include Snowflake (4.8★, 6 votes), The Pines (4.8★), Silver Lake Techy Side (4.7★, 18 votes), Tike-onderoga (5.0★), Creekside Connector (5.0★), and Out & Back Connector (5.0★), plus the rest of the county’s named trails at that park.
+Silver Lake trails now on the map include Snowflake (4.8★, 6 votes), The Pines (4.8★), Silver Lake Techy Side (4.7★, 18 votes), Tike-onderoga (5.0★), Creekside Connector (5.0★), and Out & Back Connector (5.0★), plus the rest of the county’s named trails at that park (K-D Line, Rudie's Run, Little Wing, Yeti, Barbed Wire, Old Gravel Pit, and the hike/ski/bike connectors).
+
+The map’s default filters are min rating 4.0 and min votes 5. Trails rated 4.5★ or higher stay visible even with fewer votes, and unrated OpenStreetMap / county trails stay visible. High Line (3.9★) is in the file and shows if min rating is set to 3.5.
 
 ## Runtime services (browser)
 

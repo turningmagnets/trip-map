@@ -696,7 +696,7 @@ def main():
         "filters_applied": {
             "archive_include": "stars>=4.5 any difficulty; stars>=4.0 any difficulty; stars>=3.5 with >=10 votes; connectors only if stars>=4.0",
             "excluded_from_archive": "stars<3.5, unrated (0-star) archive rows, missing coordinates",
-            "ui_defaults": "min stars 4.0; min votes 10 only below 4.5; 4.5+ always shown; unrated shown; all difficulties",
+            "ui_defaults": "min stars 4.0; min votes 5 only below 4.5; 4.5+ always shown; unrated shown; all difficulties",
         },
         "note_coverage": "The 2026-09-18 file dropped easy, easy/intermediate, and double-black trails and anything under 4.0 stars, and the MTB Project archive itself has no Silver Lake County Park (Salem Lakes) trails. Those are filled from Kenosha County GIS, with MTB Project ratings where a trail page was fetched.",
         "sources_count": dict(sources),

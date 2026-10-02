@@ -518,7 +518,7 @@
           </select>
         </label>
         <label>Min votes
-          <input type="number" id="minVotes" min="0" step="1" value="10" title="Applies to trails under 4.5 stars. 4.5★ and above stay visible. Unrated trails ignore this."/>
+          <input type="number" id="minVotes" min="0" step="1" value="5" title="Applies to trails under 4.5 stars. 4.5★ and above stay visible. Unrated trails ignore this."/>
         </label>
         <div>
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Sources</div>
@@ -1344,7 +1344,8 @@
     const yearBit = y ? ` · added ${esc(y)}` : '';
     const link = t.url ? `<div style="margin-top:6px"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open on ${esc(srcLabel)}</a></div>` : '';
     const geoBit = t.geo_source ? ` · coordinates: ${esc(t.geo_source)}` : '';
-    const rateBit = t.rating_source ? ` · rating: ${esc(sourceLabel(t.rating_source))}` : '';
+    const rateBit = (t.rating_source && t.rating_source !== t.source)
+      ? ` · rating: ${esc(sourceLabel(t.rating_source))}` : '';
     return `<div class="popup">
       <h3>${esc(t.name)}</h3>
       <div class="meta">${esc(t.location || t.state || '')}</div>
@@ -1904,7 +1905,7 @@
   document.getElementById('trailsReset').addEventListener('click', () => {
     document.getElementById('trailsQ').value = '';
     document.getElementById('minStars').value = '4';
-    document.getElementById('minVotes').value = '10';
+    document.getElementById('minVotes').value = '5';
     document.getElementById('recentOnly').checked = false;
     document.getElementById('includeUnrated').checked = true;
     document.querySelectorAll('#srcGroup input').forEach(el => {
