@@ -511,7 +511,8 @@
         </label>
         <label>Min rating
           <select id="minStars">
-            <option value="4" selected>4.0+</option>
+            <option value="3.8" selected>3.8+</option>
+            <option value="4">4.0+</option>
             <option value="4.5">4.5+</option>
             <option value="5">5.0</option>
           </select>
@@ -580,7 +581,7 @@
         <div class="side-body">
           <p><strong>Show on map:</strong> Poker only · Trails only · Both. <strong>◆ Diamonds</strong> = poker rooms; <strong>● Circles</strong> = trails.</p>
           <p><strong>Poker:</strong> diamond size/color = table count; filter by minimum tables. Default games = NLH available.</p>
-          <p><strong>Trails:</strong> circle color = rating band (rose 4.0–4.3 · lime 4.4–4.7 · cyan 4.8+). Blue→black only.</p>
+          <p><strong>Trails:</strong> circle color = rating band (orange 3.8–3.99 · rose 4.0–4.39 · lime 4.4–4.79 · cyan 4.8+). Blue→black only; rating ≥ 3.8. Min votes defaults to 10 to hide thin reviews — set it to 0 to see every trail in the dataset.</p>
           <p>Shared Esri World Dark Gray basemap (no OSM tiles). Open <code>index.html</code> via <code>file://</code>. Data: <code>data/rooms.js</code>, <code>data/trails.js</code>.</p>
         </div>
       </details>
@@ -803,14 +804,22 @@
     stars = Number(stars);
     if (stars >= 4.8) return '#22d3ee';
     if (stars >= 4.4) return '#a3e635';
-    return '#e11d48';
+    if (stars >= 4.0) return '#e11d48';
+    return '#f97316'; // 3.8–3.99
+  }
+  // Trailforks ratings carry 2 decimals (e.g. 3.96) — don't round them up to "4.0".
+  function fmtStars(v) {
+    const s = Number(v);
+    if (!isFinite(s)) return '?';
+    return (Math.round(s * 10) / 10 === s) ? s.toFixed(1) : s.toFixed(2);
   }
   function ratingRadius(stars) {
     if (stars == null || !isFinite(Number(stars))) return 6;
     stars = Number(stars);
     if (stars >= 4.8) return 8;
     if (stars >= 4.4) return 7;
-    return 6;
+    if (stars >= 4.0) return 6;
+    return 5;
   }
 
   function esc(s) {
@@ -1083,8 +1092,9 @@
       bits.push('<h3>Trails · rating</h3>');
       bits.push([
         ['#22d3ee', '4.8★+'],
-        ['#a3e635', '4.4–4.7★'],
-        ['#e11d48', '4.0–4.3★']
+        ['#a3e635', '4.4–4.79★'],
+        ['#e11d48', '4.0–4.39★'],
+        ['#f97316', '3.8–3.99★']
       ].map(([c, lab]) =>
         `<div class="legend-row"><span class="legend-dot" style="width:14px;height:14px;background:${c};border-color:#0f1419"></span>${lab}</div>`
       ).join(''));
@@ -1199,7 +1209,7 @@
 
   function passesTrailFilters(t, ignoreCorridor) {
     const q = document.getElementById('trailsQ').value.trim().toLowerCase();
-    const minStars = parseFloat(document.getElementById('minStars').value) || 4;
+    const minStars = parseFloat(document.getElementById('minStars').value) || 3.8;
     const minVotes = parseInt(document.getElementById('minVotes').value, 10);
     const votesFloor = Number.isFinite(minVotes) ? minVotes : 0;
     const sources = checkedValues('srcGroup');
@@ -1307,7 +1317,7 @@
   function starsHtml(t) {
     if (!hasStars(t)) return '<div class="stars">Unrated</div>';
     const votes = t.votes == null ? 'no vote count' : (t.votes + ' votes');
-    return `<div class="stars">${Number(t.stars).toFixed(1)}★ <span style="color:var(--muted);font-size:.8rem;font-weight:500">(${esc(votes)})</span></div>`;
+    return `<div class="stars">${fmtStars(t.stars)}★ <span style="color:var(--muted);font-size:.8rem;font-weight:500">(${esc(votes)})</span></div>`;
   }
   function trailPopup(t) {
     const len = t.length_mi != null ? `${t.length_mi} mi` : 'Length n/a';
@@ -1316,7 +1326,10 @@
     const sum = t.summary ? `<div class="meta" style="margin-top:6px">${esc(t.summary)}</div>` : '';
     const y = t.year || (t.built_or_added ? String(t.built_or_added).slice(0, 4) : null);
     const yearBit = y ? ` · added ${esc(y)}` : '';
-    const link = t.url ? `<div style="margin-top:6px"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open on ${esc(srcLabel)}</a></div>` : '';
+    const closedBit = t.closed ? ' <span style="color:#f87171">· marked closed on Trailforks</span>' : '';
+    const link = t.url ? `<div style="margin-top:6px"><a href="${esc(t.url)}" target="_blank" rel="noopener">Open on ${esc(srcLabel)}</a>${closedBit}</div>` : '';
+    const altBit = (t.alt_ids && t.alt_ids.length)
+      ? `<div class="meta" style="margin-top:4px">Also on MTB Project: ${t.alt_ids.map(a => `<a href="https://www.mtbproject.com/trail/${esc(String(a).replace('mtb-', ''))}" target="_blank" rel="noopener">${esc(a)}</a>`).join(', ')}</div>` : '';
     const geoBit = t.geo_source ? ` · coordinates: ${esc(t.geo_source)}` : '';
     const rateBit = (t.rating_source && t.rating_source !== t.source)
       ? ` · rating: ${esc(sourceLabel(t.rating_source))}` : '';
@@ -1327,6 +1340,7 @@
       <div class="meta">${esc(band)} · ${esc(len)}${yearBit}</div>
       ${sum}
       ${link}
+      ${altBit}
       <div class="src">Source: ${esc(srcLabel)}${rateBit}${geoBit}</div>
       <div class="popup-actions">
         <button type="button" class="primary" data-act="route" data-kind="trails" data-id="${esc(t.id)}">Add to route</button>
@@ -1337,7 +1351,7 @@
   function trailTip(t) {
     const band = DIFF_LABEL[t.difficulty_band] || t.difficulty_band || '';
     const stars = hasStars(t)
-      ? `${Number(t.stars).toFixed(1)}★ (${t.votes == null ? '—' : t.votes})`
+      ? `${fmtStars(t.stars)}★ (${t.votes == null ? '—' : t.votes})`
       : 'Unrated';
     return `<strong>${esc(t.name)}</strong><br/>${stars}${band ? ' · ' + esc(band) : ''}`;
   }
@@ -1374,7 +1388,7 @@
         const pill = d
           ? `<span class="diff-pill" style="background:${d.color};color:${light ? '#f9fafb' : '#0f1419'};border:1px solid ${d.border || '#fff'}">${esc(d.label)}</span>`
           : '';
-        const starBit = hasStars(t) ? `${Number(t.stars).toFixed(1)}★` : 'Unrated';
+        const starBit = hasStars(t) ? `${fmtStars(t.stars)}★` : 'Unrated';
         const voteBit = t.votes == null ? '' : `${t.votes} votes · `;
         return `<button type="button" class="list-item${activeListId === t.id ? ' active' : ''}" data-id="${esc(t.id)}" data-kind="trails">
           <div class="t-name"><span class="stars">${starBit}</span> ${esc(t.name)}${pill}</div>
@@ -1672,7 +1686,7 @@
         if (h.kind === 'poker') {
           return `${h.item.name} (${h.item.tables != null ? h.item.tables + ' tbl' : '?'}${dm})`;
         }
-        const starBit = hasStars(h.item) ? `${Number(h.item.stars).toFixed(1)}★` : 'unrated';
+        const starBit = hasStars(h.item) ? `${fmtStars(h.item.stars)}★` : 'unrated';
         return `${h.item.name} (${starBit}${dm})`;
       }).join(' · ');
       return `<button type="button" class="alt-opt${selectedAlt === i ? ' selected' : ''}" data-alt="${i}">
@@ -1694,7 +1708,7 @@
       if (h.kind === 'poker') {
         return `${h.item.name} (${h.item.tables != null ? h.item.tables + ' tbl' : '?'}) · ~${Math.round(h.detourMin)} min detour`;
       }
-      const starBit = hasStars(h.item) ? `${Number(h.item.stars).toFixed(1)}★` : 'unrated';
+      const starBit = hasStars(h.item) ? `${fmtStars(h.item.stars)}★` : 'unrated';
       return `${h.item.name} (${starBit}) · ~${Math.round(h.detourMin)} min detour`;
     }).join('<br/>');
     document.getElementById('routeResults').innerHTML =
@@ -1877,7 +1891,7 @@
   });
   document.getElementById('trailsReset').addEventListener('click', () => {
     document.getElementById('trailsQ').value = '';
-    document.getElementById('minStars').value = '4';
+    document.getElementById('minStars').value = '3.8';
     document.getElementById('minVotes').value = '10';
     document.getElementById('recentOnly').checked = false;
     document.querySelectorAll('#srcGroup input').forEach(el => {

@@ -20,7 +20,7 @@ Box copy: `/workspace/trip-map/`
 | Tab | Markers / legend | Filters (no state filter) |
 |-----|------------------|---------------------------|
 | **Poker** | Size bands ≤5 / 6–10 / 11–20 / 21+ | Size band, games (NLH default / all / limit-spread), search, unknown tables, unknown games |
-| **Trails** | Rating colors: rose 4.0–4.3 · lime 4.4–4.7 · cyan 4.8+ (no numbers on map) | Sources (MTB Project, Trailforks), min votes (default 10), difficulty blue / blue-black / black, min stars (default 4.0), last-5y toggle, search |
+| **Trails** | Rating colors: orange 3.8–3.99 · rose 4.0–4.39 · lime 4.4–4.79 · cyan 4.8+ (no numbers on map) | Sources (MTB Project, Trailforks), min votes (default 10; 0 shows all), difficulty blue / blue-black / black, min stars (default 3.8; 4.0 / 4.5 / 5.0), last-5y toggle, search |
 
 Switching tabs swaps markers, filters, legend, and side list. Shared basemap + trip planner stay put.
 
@@ -41,7 +41,8 @@ Corridor counts respect the **current tab’s filters**.
 | Dataset | Loaded |
 |---------|--------|
 | Poker rooms (`data/rooms.js`) | **434** (318 with table counts) |
-| MTB trails (`data/trails.js`) | **10,261** (mtbproject 6,974 · trailforks 3,287). Blue, blue/black, and black only, all ★≥4.0. |
+| MTB trails (`data/trails.js`) | **12,434** (trailforks 5,935 · mtbproject 6,499). Blue, blue/black, and black only, all ★≥3.8. Default view (≥10 votes): 5,098. |
+| Ride-recording export (`data/trails_export.json` / `.csv`) | All 12,434, no vote filter; start/end + Trailforks GPS lines for 5,872 |
 
 ## Basemap
 
@@ -59,6 +60,8 @@ Esri World Dark Gray Base + Reference (avoids OSM tile-server 403).
 |------|---------|
 | `index.html` | Full app |
 | `data/rooms.js` | Poker dataset |
-| `data/trails.js` | Trails dataset |
+| `data/trails.js` | Trails dataset (map) |
+| `data/trails_export.json` / `.csv` | All ★≥3.8 trails for the ride-recording tool (ignores UI filters; lines + start/end) |
+| `data/trails_export_other_difficulty.*` | Recall supplement: ★≥3.8 green / greenBlue / dblack / connector trails (not on map) |
 | `SOURCES.md` | Provenance |
 | `README.md` | This file |

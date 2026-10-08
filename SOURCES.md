@@ -1,6 +1,6 @@
 # Sources — Trip Map (combined)
 
-**Build date:** 2026-10-02 (UTC)  
+**Build date:** 2026-10-08 (MT) — trails rebuilt; poker unchanged since 2026-10-02  
 **Purpose:** Personal travel planning for Austen Silva (SecondBrain).
 
 ## Poker rooms
@@ -17,30 +17,39 @@ Primary upstream (see that project’s `SOURCES.md`):
 
 ## MTB trails
 
-**Count:** 10,261 trails (mtbproject 6,974 · trailforks 3,287). The 2026-09-18 map had **10,256**.
+**Rebuilt 2026-10-08 (MT).** Cutoff lowered from ★4.0 to **★3.8**, plus a completeness pass over the whole local Trailforks crawl cache.
 
-The map only lists **blue, blue/black, and black** trails rated **4.0 or higher**. Easy, easy/intermediate, and double-black stay off, including when another source gives them a high star rating. Default filters are min rating 4.0 and min votes 10, same as the 2026-09-18 map.
+**Count:** **12,434** trails (trailforks 5,935 · mtbproject 6,499). Previous file (2026-10-02): 10,261.
 
-### What was dropping qualifying trails
+| | Count |
+|---|---:|
+| ★ 3.8–3.99 | 1,673 |
+| ★ 4.0–4.49 | 7,636 |
+| ★ 4.5–4.99 | 1,851 |
+| ★ 5.0 | 1,274 |
+| blue / blue-black / black | 6,963 / 1,924 / 3,547 |
+| Default view (★≥3.8, ≥10 votes) | 5,098 (was 3,006 at ★≥4.0) |
 
-Qualifying means blue / blue-black / black and ★≥4.0 on MTB Project or Trailforks. Counts below are measured against the MTB Project archive (`sgreylewis/mtb-trail-finder` `data/US_trails_half_step.csv`, 26,754 rows, last committed **2018-01-23**) plus the Silver Lake County Park pages fetched from MTB Project.
+Only **blue, blue/black, and black** trails are listed; easy, easy/intermediate, double-black, and proline stay off. The ride-recording export (`data/trails_export.json` / `.csv`) has every trail in the file regardless of the map's vote filter, with Trailforks GPS track lines for 5,872 of them. `data/trails_export_other_difficulty.*` holds ★≥3.8 trails dropped only by the difficulty rules (not shown on the map).
 
-| Cause | Before | After |
-|---|---:|---:|
-| Connector rows (type `Connector`; 122 of 131 have 1 vote and an empty summary). Still excluded, matching the original filter. | 131 | 131 |
-| Same trail already on the map as Trailforks (normalized name, coordinates rounded to 0.001°). Kept as one marker. | 208 | 208 |
-| Archive row with no Trailforks match and not on the map (Rim Trail, Cañon City CO; Whiskey Creek, Minturn CO) | 2 | 0 |
-| Stale archive: Silver Lake blue–black ★≥4 pages whose ids are newer than the 2018 file | 3 | 0 |
+### What changed vs the 2026-10-02 file
 
-The archive has **7,310** blue–black ★≥4 rows. **6,969** of those were already the MTB Project half of the 2026-09-18 map. 6,969 + 131 + 208 + 2 = 7,310.
+| Change | Trails |
+|---|---:|
+| New ★3.8–3.99 trails (Trailforks 1,217 · MTB Project 305) | +1,522 |
+| Trailforks ★≥4.0 trails already in the Sep 2026 crawl cache but missing from the old build (built before enrichment finished; old parser sometimes read another trail's rating widget) | +1,432 |
+| MTB Project markers folded into the same Trailforks trail (name match, ≤1 km; MTB Project id kept in `alt_ids`) | −780 |
+| Removed non-US entry (Flow, Iwakuni, Japan) | −1 |
+| **Net** | **+2,173** |
 
-Those 208 Trailforks matches sit a median of about 35 feet from the archive point. They are not missing. Trailforks rows in this file use only blue and black (no blue/black band): of the 208, 73 are blue/black on MTB Project and blue or black on Trailforks. Both bands are allowed, so the trail still shows.
+### Rating basis
 
-Not causes of the gap, checked and ruled out: a region cap, a per-state quota, a vote cutoff (included trails go down to 1 vote), and a same-name dedupe inside MTB Project (only 2 of the 210 non-connector omissions share a name with a nearby included MTB row).
+- **Trailforks:** the rating shown on the trail page (Trailforks' Bayesian rating, e.g. "3.86 / 5 with 11 votes"; shown with two decimals in popups). Low-vote trails sit near Trailforks' ~3.98 prior. If only a directory card exists, its raw average is used.
+- **MTB Project:** archive star average (`sgreylewis/mtb-trail-finder` CSV, last committed 2018-01-23) plus public trail pages for the Silver Lake trails below.
 
 ### Silver Lake County Park, Salem Lakes, WI
 
-The 2018 archive has no trails in this park. Public MTB Project pages (crawl delay respected) rate the named trails as follows. Only the blue–black ★≥4 rows are on the map:
+The 2018 archive has no trails in this park. Public MTB Project pages (crawl delay respected) rate the named trails as follows. Only the blue–black ★≥3.8 rows are on the map (originally ★≥4.0; High Line joined at 3.8):
 
 | Trail | Stars | Votes | MTB Project difficulty | On the map |
 |---|---:|---:|---|---|
@@ -55,7 +64,7 @@ The 2018 archive has no trails in this park. Public MTB Project pages (crawl del
 | Rudie's Run | 4.4 | 7 | easy/intermediate | no |
 | Yeti | 4.3 | 7 | easy | no |
 | Barbed Wire | 4.0 | 6 | easy/intermediate | no |
-| High Line | 3.9 | 8 | blue/black | no (below 4.0) |
+| High Line | 3.9 | 8 | blue/black | yes (since the 3.8 cutoff, 2026-10-08) |
 | Hike/Ski/Bike Trail | 3.0 | 1 | easy/intermediate | no |
 | Hike/Ski/Bike Trail East | unrated | 0 | easy | no |
 
@@ -65,28 +74,18 @@ With the default min-votes filter of 10, Techy Side (18 votes) is visible and KD
 
 ### Sources
 
-- **MTB Project archive** — the same CSV as the 2026-09-18 file. Inclusion: difficulty blue / blueBlack / black, ★≥4.0, type other than Connector, and not already represented by a Trailforks point at the rounded coordinate.
-- **MTB Project trail pages** — the three Silver Lake trails above. Ratings, votes, difficulty, summary, and coordinates come from those pages.
-- **Trailforks** — the 3,287 records already on the 2026-09-18 map. **Not re-crawled.** Trailforks’ data policy allows their data only through an API key and says not to copy it for non-personal use, so trails that exist only on Trailforks and were missed by that earlier crawl are still absent.
-- **Not used for trails:** OpenStreetMap `route=mtb` and `mtb:scale` ways have no star rating, so they fail the 4.0 floor. Unrated county trails (including Petrifying Springs) are not included.
+- **MTB Project archive** — `US_trails_half_step.csv` (26,754 rows). Inclusion: blue / blueBlack / black, ★≥3.8, type other than Connector.
+- **MTB Project trail pages** — Silver Lake Techy Side, KD Line, Little Wing (2026-10-02), High Line (2026-10-08).
+- **Trailforks** — cached public HTML from the Sep 2026 crawl (7,426 detail pages, 2,132 directory cards, 152,724 region-table rows). **Not re-crawled:** trailforks.com blocks this machine (Cloudflare 403) since Oct 7, 2026. Trailforks' data policy allows bulk data only via an API key.
+- **Not used for the rated layer:** OpenStreetMap (no star ratings). It is used only as an unrated geometry cross-check in the mtb-trails-map project.
 
-The archive also contains 12,003 rows that are not blue–black (easy, easy/intermediate, double-black, or missing difficulty) and 7,441 blue–black rows under 4.0 stars. Those stay out on purpose.
+### Known gaps
 
-Rebuild with `python3 scripts/build_trails.py`. It reads `main:data/trails.js` as the baseline, the CSV at `/tmp/US_trails_half_step.csv`, and `/tmp/trail-build/ratings.jsonl`.
+- **Idaho Trailforks region was never crawled** (its slug is `idaho-3166`). Idaho Trailforks trails on the map come only from directory cards (55 of them). Estimated ~0.9–1.1k rated blue/black Idaho Trailforks trails are missing. Boise, Pocatello and Sun Valley coverage relies mostly on the 2018 MTB Project archive.
+- **~37.8k Trailforks blue/black trails with 1–9 votes** appear in the cached region tables but have no cached rating or coordinates. Because of the Bayesian prior, an estimated ~28–33k of them would display ★≥3.8. Closing this needs a browser pass over their detail pages or a Trailforks API key.
+- ~36k blue/black Trailforks trails have 0 votes (unrated) and can never meet a star cutoff.
 
-### Coverage check (same bounding boxes)
-
-| Area | Before | After | of which 4.5★+ |
-|---|---:|---:|---:|
-| Silver Lake County Park, Salem Lakes, WI | 0 | 3 | 1 |
-| Salem Lakes area | 0 | 3 | 1 |
-| Moab, UT | 66 | 66 | 25 |
-| Bentonville, AR | 102 | 102 | 26 |
-| Kingdom Trails, VT | 37 | 37 | 23 |
-| Copper Harbor, MI | 21 | 21 | 9 |
-| Pisgah / Brevard, NC | 70 | 70 | 28 |
-
-Moab, Bentonville, Kingdom Trails, Copper Harbor, and Pisgah do not gain markers: the blue–black ★≥4 archive rows that were absent there already have a Trailforks point on the map. The new archive rows (Rim Trail, Whiskey Creek) are outside those boxes.
+Rebuild: `/workspace/mtb-trails-map/scripts/parse_cache_v2.py` then `build_trails_dataset.py` (copies in `scripts/`). The older `scripts/build_trails.py` (2026-10-02, ★4.0) is superseded.
 
 ## Runtime services (browser)
 
