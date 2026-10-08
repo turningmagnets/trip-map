@@ -256,7 +256,7 @@ def load_tf(funnel, other, region_rows):
             "closed": d.get("closed") == "1",
             "unsanctioned": d.get("unsanctioned") == "1",
             "archived": d.get("archived") == "1",
-            "direction": {"1": "downhill_only", "2": "both", "3": "uphill_only", "4": "downhill_primary", "5": "uphill_primary", "6": "one_direction"}.get(str(d.get("direction")), None),
+            "direction": {"1": "downhill_only", "2": "downhill_primary", "3": "both", "4": "uphill_primary", "5": "uphill_only", "6": "one_direction"}.get(str(d.get("direction")), None),
             "_line": line,
             "geometry": "line" if len(line) >= 2 else "point_start",
         }
