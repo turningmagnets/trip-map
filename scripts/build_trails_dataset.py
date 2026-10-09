@@ -7,6 +7,8 @@ Inputs (all local cache, nothing fetched):
   cache/trailforks/v2_cards.json                 every cached TF directory card
   cache/trailforks/v2_region_rows.json           every cached TF state region-table row (votes, no stars)
   raw/trailforks_curated.json                    hand-curated TF pages (optional)
+  cache/trailforks/v3_browser_crawl.json         2026-10 browser pass (scripts/merge_crawl_results.py);
+                                                 set NO_CRAWL=1 to build without it
 
 Rating basis
   Trailforks: the rating shown on the trail page (Bayesian, e.g. "3.86 / 5 with 11 votes").
@@ -19,6 +21,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -32,7 +35,9 @@ TF_DETAILS = TFC / "v2_details.json"
 TF_CARDS = TFC / "v2_cards.json"
 TF_REGION = TFC / "v2_region_rows.json"
 TF_CURATED = ROOT / "raw" / "trailforks_curated.json"
-OUT = ROOT / "data"
+TF_CRAWL = TFC / "v3_browser_crawl.json"
+OUT = Path(os.environ.get("TRAILS_OUT") or (ROOT / "data"))
+USE_CRAWL = os.environ.get("NO_CRAWL") != "1"
 
 STARS_MIN = 3.8
 ALLOWED = {"blue", "blueBlack", "black"}
@@ -204,7 +209,8 @@ def geo_ok(country, state, lat):
     return False
 
 
-def load_tf(funnel, other, region_rows):
+def load_tf(funnel, other, region_rows, crawl=None):
+    crawl = crawl or {}
     details = [d for d in json.loads(TF_DETAILS.read_text())]
     cards = {c["trailforks_id"]: c for c in json.loads(TF_CARDS.read_text())}
     out = {}
@@ -223,6 +229,19 @@ def load_tf(funnel, other, region_rows):
         votes = d.get("vis_votes") if d.get("vis_votes") is not None else d.get("votes")
         state = norm_state(d.get("prov"))
         rr = region_rows.get(tid)
+        c = crawl.get(tid)
+        if c:  # browser-crawl values win where real
+            stars = c["stars"] if c["stars"] is not None else stars
+            votes = c["votes"] if c["votes"] is not None else votes
+            if c["band"]:
+                band = c["band"]
+            if c["th_lat"] is not None:
+                d = {**d, "lat": c["th_lat"], "lon": c["th_lon"]}
+            if c["closed"] is not None:
+                d = {**d, "closed": "1" if c["closed"] else "0"}
+            if c["riding_area"]:
+                d = {**d, "ridingarea": c["riding_area"]}
+            funnel["crawl_overlay_on_detail_page"] += 1
         if not stars:
             funnel["tf_detail_drop_no_rating"] += 1
             continue
@@ -260,6 +279,10 @@ def load_tf(funnel, other, region_rows):
             "_line": line,
             "geometry": "line" if len(line) >= 2 else "point_start",
         }
+        if c and c["th_lat"] is not None:
+            rec["trailhead_lat"], rec["trailhead_lon"] = c["th_lat"], c["th_lon"]
+        if c:
+            rec["crawl_batch"] = c["batch"]
         if band not in ALLOWED:
             funnel[f"tf_detail_drop_difficulty_{band}"] += 1
             rec["excluded_reason"] = f"difficulty={band}"
@@ -273,6 +296,14 @@ def load_tf(funnel, other, region_rows):
         if tid in detail_ids:
             continue
         funnel["tf_card_only"] += 1
+        cc = crawl.get(tid)
+        if cc:  # page rating from the browser pass beats the card's raw average
+            c = dict(c)
+            if cc["stars"] is not None:
+                c["stars"], c["_basis"] = cc["stars"], "trailforks_page_bayesian"
+            if cc["th_lat"] is not None:
+                c["lat"], c["lon"] = cc["th_lat"], cc["th_lon"]
+            funnel["crawl_overlay_on_card"] += 1
         if c.get("stars") is None or c.get("stars") == 0:
             funnel["tf_card_drop_unrated"] += 1
             continue
@@ -309,8 +340,8 @@ def load_tf(funnel, other, region_rows):
         rec = {
             "id": f"tf-{tid}", "name": c.get("name") or f"Trailforks {tid}",
             "lat": c["lat"], "lon": c["lon"],
-            "stars": round(c["stars"], 2), "stars_basis": "trailforks_card_raw_avg",
-            "stars_raw_avg": c["stars"],
+            "stars": round(c["stars"], 2), "stars_basis": c.get("_basis") or "trailforks_card_raw_avg",
+            "stars_raw_avg": None if c.get("_basis") else c["stars"],
             "votes": rr.get("votes") or 0,
             "difficulty": band, "difficulty_band": band,
             "length_mi": None, "location": loc, "riding_area": rr.get("area"),
@@ -320,6 +351,18 @@ def load_tf(funnel, other, region_rows):
             "closed": bool(rr.get("closed")), "unsanctioned": None, "archived": None, "direction": None,
             "_line": [], "geometry": "point_start",
         }
+        if cc:
+            if cc["votes"] is not None:
+                rec["votes"] = cc["votes"]
+            if cc["band"]:
+                rec["difficulty"] = rec["difficulty_band"] = band = cc["band"]
+            if cc["riding_area"]:
+                rec["riding_area"] = cc["riding_area"]
+            if cc["closed"] is not None:
+                rec["closed"] = cc["closed"]
+            if cc["th_lat"] is not None:
+                rec["trailhead_lat"], rec["trailhead_lon"] = cc["th_lat"], cc["th_lon"]
+            rec["crawl_batch"] = cc["batch"]
         if band not in ALLOWED:
             funnel[f"tf_card_drop_difficulty_{band}"] += 1
             rec["excluded_reason"] = f"difficulty={band}"
@@ -328,12 +371,61 @@ def load_tf(funnel, other, region_rows):
         out[tid] = rec
         funnel["tf_card_kept"] += 1
 
+    # Browser-crawl trails with no cached detail page or card (the gap worklist)
+    crawl_resolved = set()
+    for tid, c in crawl.items():
+        if tid in detail_ids or tid in cards:
+            continue
+        funnel["crawl_new_rows"] += 1
+        if c["stars"] is None:
+            funnel["crawl_new_held_bad_or_missing_rating"] += 1
+            continue
+        if c["th_lat"] is None:
+            funnel["crawl_new_held_no_coords"] += 1
+            continue
+        crawl_resolved.add(tid)
+        if c["stars"] < STARS_MIN:
+            funnel["crawl_new_drop_below_3.8"] += 1
+            continue
+        rr = region_rows.get(tid) or {}
+        state = SLUG_STATE.get(rr.get("state_slug") or "") or norm_state(c.get("queue_state"))
+        if not state or (state not in STATES and state not in CA_OK):
+            funnel["crawl_new_drop_outside_US_BC_AB"] += 1
+            continue
+        band = c["band"]
+        if not band:
+            t = (rr.get("diff_title") or "").lower()
+            band = "blue" if "intermediate" in t else "black" if "very difficult" in t else "unknown"
+        votes = c["votes"] if c["votes"] is not None else (rr.get("votes") or 0)
+        closed = c["closed"] if c["closed"] is not None else bool(rr.get("closed"))
+        rec = {
+            "id": f"tf-{tid}", "name": c["name"] or rr.get("name") or f"Trailforks {tid}",
+            "lat": c["th_lat"], "lon": c["th_lon"],
+            "trailhead_lat": c["th_lat"], "trailhead_lon": c["th_lon"],
+            "end_lat": c["end_lat"], "end_lon": c["end_lon"],
+            "stars": round(c["stars"], 2), "stars_basis": "trailforks_page_bayesian", "stars_raw_avg": None,
+            "votes": int(votes), "difficulty": band, "difficulty_band": band,
+            "length_mi": None, "location": None, "riding_area": c["riding_area"] or rr.get("area"),
+            "state": state, "country": None, "source": "trailforks",
+            "url": c["url"] or rr.get("url", ""), "summary": None, "built_or_added": None, "year": None,
+            "closed": closed, "unsanctioned": None, "archived": None, "direction": None,
+            "_line": [], "geometry": "point_trailhead", "crawl_batch": c["batch"],
+        }
+        if band not in ALLOWED:
+            funnel[f"crawl_new_drop_difficulty_{band}"] += 1
+            rec["excluded_reason"] = f"difficulty={band}"
+            other.append(rec)
+            continue
+        out[tid] = rec
+        funnel["crawl_new_kept"] += 1
+    load_tf.crawl_resolved = crawl_resolved
+
     # Curated (hand-checked) pages
     if TF_CURATED.exists():
         cur = json.loads(TF_CURATED.read_text())
         for t in cur if isinstance(cur, list) else cur.get("trails", []):
             tid = str(t.get("trailforks_id") or str(t.get("id", "")).replace("tf-", ""))
-            if not tid or tid in out or t.get("exclude"):
+            if not tid or tid in out or tid in crawl or t.get("exclude"):
                 continue
             try:
                 stars = float(t.get("stars") or 0)
@@ -435,7 +527,12 @@ def main():
     other = []
     region_rows = {r["trailforks_id"]: r for r in json.loads(TF_REGION.read_text())}
     mtb = load_mtb(funnel, other)
-    tf, detail_ids, cards = load_tf(funnel, other, region_rows)
+    crawl = {}
+    if USE_CRAWL and TF_CRAWL.exists():
+        crawl = {c["trailforks_id"]: c for c in json.loads(TF_CRAWL.read_text())}
+    funnel["crawl_rows_loaded"] = len(crawl)
+    tf, detail_ids, cards = load_tf(funnel, other, region_rows, crawl)
+    crawl_resolved = getattr(load_tf, "crawl_resolved", set())
     mtb_kept, merges = dedupe(mtb, tf, funnel)
     trails = tf + mtb_kept
     trails.sort(key=lambda t: (-t["stars"], -(t["votes"] or 0), t["name"]))
@@ -485,13 +582,25 @@ def main():
 
     # ---- ride-recording export (all >=3.8, no vote filter)
     def export_rec(t, include_reason=False):
+        """lat/lon = the trigger point for the ride-recording tool: the trailhead / start.
+        Priority: Trailforks page trailhead (browser crawl) > first point of the GPS track >
+        TF card start point > MTB Project trailhead point."""
         line = simplify(t.get("_line") or [], 8.0)
+        if t.get("trailhead_lat") is not None:
+            plat, plon, basis = t["trailhead_lat"], t["trailhead_lon"], "tf_page_trailhead"
+        elif line:
+            plat, plon, basis = line[0][0], line[0][1], "tf_track_start"
+        elif t["source"] == "mtbproject":
+            plat, plon, basis = t["lat"], t["lon"], "mtbproject_trailhead"
+        else:
+            plat, plon, basis = t["lat"], t["lon"], ("tf_curated_point" if t.get("stars_basis") == "trailforks_curated"
+                                                     else "tf_card_start")
         e = {
             "id": t["id"], "source": t["source"], "source_url": t["url"], "name": t["name"],
-            "lat": t["lat"], "lon": t["lon"],
+            "lat": plat, "lon": plon, "point_basis": basis,
             "geometry": t["geometry"],
-            "start_lat": line[0][0] if line else t["lat"], "start_lon": line[0][1] if line else t["lon"],
-            "end_lat": line[-1][0] if line else None, "end_lon": line[-1][1] if line else None,
+            "start_lat": line[0][0] if line else plat, "start_lon": line[0][1] if line else plon,
+            "end_lat": line[-1][0] if line else t.get("end_lat"), "end_lon": line[-1][1] if line else t.get("end_lon"),
             "line": [[round(a, 5), round(b, 5)] for a, b in line] if line else None,
             "line_points_full": len(t.get("_line") or []),
             "length_mi": t.get("length_mi"),
@@ -512,15 +621,18 @@ def main():
         "generated": payload["generated"],
         "description": "All trails rated >= 3.8 stars (blue / blue-black / black), no vote filter. "
                        "geometry=line -> 'line' is the Trailforks GPS track (Douglas-Peucker 8 m). "
-                       "point_trailhead -> MTB Project archive gives only one point (usually trailhead/start). "
-                       "point_start -> Trailforks directory card start point only.",
+                       "point_trailhead -> one trailhead/start point only (MTB Project archive, or the Trailforks "
+                       "trail page trailhead from the 2026-10 browser pass). "
+                       "point_start -> Trailforks directory card start point only. "
+                       "lat/lon is always the trailhead/start trigger point; point_basis says where it came from.",
         "count": len(exp),
         "sources_count": dict(by_src), "geometry_count": dict(by_geom),
+        "point_basis_count": dict(Counter(e["point_basis"] for e in exp)),
     }
     (OUT / "trails_export.json").write_text(json.dumps({**meta, "trails": exp}, separators=(",", ":")))
     cols = ["id", "source", "source_url", "name", "lat", "lon", "geometry", "start_lat", "start_lon", "end_lat", "end_lon",
             "line_polyline", "length_mi", "stars", "stars_basis", "stars_raw_avg", "votes", "difficulty", "riding_area",
-            "location", "state", "country", "direction", "closed", "also_listed_as"]
+            "location", "state", "country", "direction", "closed", "also_listed_as", "point_basis"]
     with (OUT / "trails_export.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
         w.writeheader()
@@ -547,7 +659,7 @@ def main():
             w.writerow(row)
 
     # ---- gap worklist: TF blue/black trails in region tables with votes but no rating/coords in cache
-    have = {t["id"][3:] for t in trails if t["source"] == "trailforks"} | detail_ids | set(cards)
+    have = {t["id"][3:] for t in trails if t["source"] == "trailforks"} | detail_ids | set(cards) | crawl_resolved
     gap = []
     for tid, r in region_rows.items():
         title = (r.get("diff_title") or "").lower()
@@ -571,6 +683,18 @@ def main():
         "votes_ge_10_by_source": dict(Counter(t["source"] for t in votes10)),
         "other_difficulty_supplement": len(oth), "gap_worklist": len(gap),
         "gap_by_votes": dict(Counter("1-4" if g["votes"] < 5 else "5-9" if g["votes"] < 10 else "10+" for g in gap)),
+        "browser_crawl": {
+            "rows_loaded": len(crawl),
+            "new_kept_on_map": funnel["crawl_new_kept"],
+            "new_kept_merged_mtbproject_points": sum(1 for t in trails if t.get("crawl_batch") and t.get("alt_ids")),
+            "new_below_3.8": funnel["crawl_new_drop_below_3.8"],
+            "new_other_difficulty": sum(v for k, v in funnel.items() if k.startswith("crawl_new_drop_difficulty_")),
+            "held_no_coords": funnel["crawl_new_held_no_coords"],
+            "held_bad_or_missing_rating": funnel["crawl_new_held_bad_or_missing_rating"],
+            "overlay_on_cached_detail_or_card": funnel["crawl_overlay_on_detail_page"] + funnel["crawl_overlay_on_card"],
+            "on_map_by_star_band": dict(Counter(band_label(t["stars"]) for t in trails if t.get("crawl_batch"))),
+            "on_map_by_difficulty": dict(Counter(t["difficulty_band"] for t in trails if t.get("crawl_batch"))),
+        } if crawl else None,
         "funnel": dict(sorted(funnel.items())),
     }
     (OUT / "build_stats.json").write_text(json.dumps(stats, indent=2))

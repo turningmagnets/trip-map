@@ -19,16 +19,16 @@ Primary upstream (see that project’s `SOURCES.md`):
 
 **Rebuilt 2026-10-08 (MT).** Cutoff lowered from ★4.0 to **★3.8**, plus a completeness pass over the whole local Trailforks crawl cache.
 
-**Count:** **12,434** trails (trailforks 5,935 · mtbproject 6,499). Previous file (2026-10-02): 10,261.
+**Count:** **12,563** trails (trailforks 6,082 · mtbproject 6,481), incl. 147 Trailforks trails from the 2026-10 browser pass (trailhead point only). Previous file (2026-10-02): 10,261.
 
 | | Count |
 |---|---:|
-| ★ 3.8–3.99 | 1,673 |
-| ★ 4.0–4.49 | 7,636 |
-| ★ 4.5–4.99 | 1,851 |
+| ★ 3.8–3.99 | 1,779 |
+| ★ 4.0–4.49 | 7,661 |
+| ★ 4.5–4.99 | 1,849 |
 | ★ 5.0 | 1,274 |
-| blue / blue-black / black | 6,963 / 1,924 / 3,547 |
-| Default view (★≥3.8, ≥10 votes) | 5,098 (was 3,006 at ★≥4.0) |
+| blue / blue-black / black | 7,058 / 1,917 / 3,588 |
+| Default view (★≥3.8, ≥10 votes) | 5,094 (was 3,006 at ★≥4.0) |
 
 Only **blue, blue/black, and black** trails are listed; easy, easy/intermediate, double-black, and proline stay off. The ride-recording export (`data/trails_export.json` / `.csv`) has every trail in the file regardless of the map's vote filter, with Trailforks GPS track lines for 5,872 of them. `data/trails_export_other_difficulty.*` holds ★≥3.8 trails dropped only by the difficulty rules (not shown on the map).
 
