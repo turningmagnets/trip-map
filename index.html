@@ -581,7 +581,7 @@
         <div class="side-body">
           <p><strong>Show on map:</strong> Poker only · Trails only · Both. <strong>◆ Diamonds</strong> = poker rooms; <strong>● Circles</strong> = trails.</p>
           <p><strong>Poker:</strong> diamond size/color = table count; filter by minimum tables. Default games = NLH available.</p>
-          <p><strong>Trails:</strong> circle color = rating band (orange 3.8–3.99 · rose 4.0–4.39 · lime 4.4–4.79 · cyan 4.8+). Blue→black only; rating ≥ 3.8. Min votes defaults to 10 to hide thin reviews — set it to 0 to see every trail in the dataset.</p>
+          <p><strong>Trails:</strong> circle color = rating band (orange 3.8–4.1 · lime 4.2–4.5 · cyan 4.6+). Blue→black only; rating ≥ 3.8. Min votes defaults to 10 to hide thin reviews — set it to 0 to see every trail in the dataset.</p>
           <p>Shared Esri World Dark Gray basemap (no OSM tiles). Open <code>index.html</code> via <code>file://</code>. Data: <code>data/rooms.js</code>, <code>data/trails.js</code>.</p>
         </div>
       </details>
@@ -802,10 +802,10 @@
   function ratingColor(stars) {
     if (stars == null || !isFinite(Number(stars))) return '#94a3b8';
     stars = Number(stars);
-    if (stars >= 4.8) return '#22d3ee';
-    if (stars >= 4.4) return '#a3e635';
-    if (stars >= 4.0) return '#e11d48';
-    return '#f97316'; // 3.8–3.99
+    // Austen, 2026-10-10: three bands -- 3.8–4.1 / 4.2–4.5 / 4.6+ (ratings carry 2 decimals: 4.19 is band one).
+    if (stars >= 4.6) return '#22d3ee';
+    if (stars >= 4.2) return '#a3e635';
+    return '#f97316'; // 3.8–4.1
   }
   // Trailforks ratings carry 2 decimals (e.g. 3.96) — don't round them up to "4.0".
   function fmtStars(v) {
@@ -1091,10 +1091,9 @@
     if (showTrailsLayer()) {
       bits.push('<h3>Trails · rating</h3>');
       bits.push([
-        ['#22d3ee', '4.8★+'],
-        ['#a3e635', '4.4–4.79★'],
-        ['#e11d48', '4.0–4.39★'],
-        ['#f97316', '3.8–3.99★']
+        ['#22d3ee', '4.6★+'],
+        ['#a3e635', '4.2–4.5★'],
+        ['#f97316', '3.8–4.1★']
       ].map(([c, lab]) =>
         `<div class="legend-row"><span class="legend-dot" style="width:14px;height:14px;background:${c};border-color:#0f1419"></span>${lab}</div>`
       ).join(''));
