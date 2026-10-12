@@ -41,7 +41,7 @@ Corridor counts respect the **current tab’s filters**.
 | Dataset | Loaded |
 |---------|--------|
 | Poker rooms (`data/rooms.js`) | **434** (318 with table counts) |
-| MTB trails (`data/trails.js`) | **13,820** (trailforks 7,508 · mtbproject 6,312). Blue, blue/black, and black only, all ★≥3.8. Default view (≥10 votes): 5,082. |
+| MTB trails (`data/trails.js`) | **13,876** (trailforks 7,570 · mtbproject 6,306). Blue, blue/black, and black only, all ★≥3.8. Default view (≥10 votes): 5,081. |
 | Ride-recording export (`data/trails_export.json` / `.csv`) | All 12,563, no vote filter; lat/lon = trailhead/start trigger point (`point_basis`); start/end + Trailforks GPS lines for 5,872 |
 
 ## Basemap

@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """Normalize + validate Trailforks browser-crawl results for build_trails_dataset.py.
 
-Reads   crawl/results/batch_NNN.csv   (combined batches only; batch_NNNa/b/c/d chunk files are ignored)
+Reads   crawl/results/batch_NNN.csv (+ chunks only if no combined file) then batch_NNNr.csv rechecks, which override earlier rows
 Writes  cache/trailforks/v3_browser_crawl.json   normalized rows the build merges in
         data/crawl_merge_report.json             counts + problems
         data/crawl_needs_recheck.csv             rows held back (bad rating / no coords / unknown difficulty)
 
 Rules (nothing invented):
   * "none" / "" -> None. A field that is None never overwrites cached data.
-  * avg_rating must be a Trailforks page (Bayesian) figure. The page rating is
-    ~ (6*3.98 + votes*raw)/(6+votes); a value outside the range that formula allows for
-    raw in [1,5] (e.g. 3.0 with 1 vote) is a misread (raw avg / ride-log "Avg") ->
-    rating dropped, row flagged for recapture.
+  * avg_rating read from the page is accepted if within 0-5 (Trailforks shows raw values
+    like 5.0/1.0 on low-vote trails; rechecks confirmed). Missing or out-of-range -> flagged.
   * difficulty wording is mapped to the dataset's Trailforks bands; unknown wording -> None + flag.
   * trailhead outside lat 24..61 / lon -170..-50 -> coords dropped + flag.
 """
@@ -64,7 +62,15 @@ def bayes_range(votes):
 
 
 def main():
-    files = sorted(p for p in RESULTS.glob("batch_*.csv") if re.fullmatch(r"batch_\d{3}\.csv", p.name))
+    allf = {p.name: p for p in RESULTS.glob("batch_*.csv")}
+    files = []
+    for num in sorted({m.group(1) for n in allf if (m := re.fullmatch(r"batch_(\d{3})[a-z]?\.csv", n))}):
+        if f"batch_{num}.csv" in allf:
+            files.append(allf[f"batch_{num}.csv"])
+        else:  # no combined file yet -> use its chunks
+            files += sorted(allf[n] for n in allf if re.fullmatch(rf"batch_{num}[a-q]\.csv", n))
+        if f"batch_{num}r.csv" in allf:  # recheck rows override earlier rows (processed after)
+            files.append(allf[f"batch_{num}r.csv"])
     queue = {r["trailforks_id"]: (i, r) for i, r in enumerate(csv.DictReader(QUEUE.open()))}
     rows, flags, cnt = {}, [], Counter()
     for f in files:
@@ -84,14 +90,8 @@ def main():
             except ValueError:
                 probs.append(f"unparseable rating {stars!r}")
                 stars = None
-            if stars is not None and votes is not None:
-                lo, hi = bayes_range(votes)
-                if not (lo <= stars <= hi):
-                    probs.append(f"rating {stars} impossible for page rating with {votes} vote(s) "
-                                 f"(allowed {lo + TOL:.2f}-{hi - TOL:.2f}); likely raw/ride-log avg")
-                    stars = None
-            elif stars is not None and not (1 <= stars <= 5):
-                probs.append(f"rating {stars} out of 1-5")
+            if stars is not None and not (0 <= stars <= 5):
+                probs.append(f"rating {stars} out of 0-5")
                 stars = None
             if stars is None and not probs:
                 probs.append("no rating")
@@ -129,6 +129,7 @@ def main():
             if tid in rows:
                 cnt["duplicate_id_later_batch_wins"] += 1
             rows[tid] = rec
+            flags = [x for x in flags if x["trailforks_id"] != tid]  # later row supersedes
             for p in probs:
                 flags.append({"batch": f.stem, "trailforks_id": tid, "name": rec["name"], "problem": p,
                               "url": rec["url"]})
