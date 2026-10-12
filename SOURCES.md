@@ -23,12 +23,12 @@ Primary upstream (see that project’s `SOURCES.md`):
 
 | | Count |
 |---|---:|
-| ★ 3.8–3.99 | 2,160 |
-| ★ 4.0–4.49 | 7,927 |
-| ★ 4.5–4.99 | 1,825 |
-| ★ 5.0 | 1,269 |
-| blue / blue-black / black | 7,491 / 1,895 / 3,795 |
-| Default view (★≥3.8, ≥10 votes) | 5,085 (was 3,006 at ★≥4.0) |
+| ★ 3.8–3.99 | 2,587 |
+| ★ 4.0–4.49 | 8,166 |
+| ★ 4.5–4.99 | 1,811 |
+| ★ 5.0 | 1,256 |
+| blue / blue-black / black | 7,947 / 1,876 / 3,997 |
+| Default view (★≥3.8, ≥10 votes) | 5,082 (was 3,006 at ★≥4.0) |
 
 Only **blue, blue/black, and black** trails are listed; easy, easy/intermediate, double-black, and proline stay off. The ride-recording export (`data/trails_export.json` / `.csv`) has every trail in the file regardless of the map's vote filter, with Trailforks GPS track lines for 5,872 of them. `data/trails_export_other_difficulty.*` holds ★≥3.8 trails dropped only by the difficulty rules (not shown on the map).
 
