@@ -1,0 +1,31 @@
+# Matches the AIOS queue contract: queue label, main base, fast-tier check.
+merge_queue:
+  dequeued_label: dequeued  # the board poller uses this authoritative removal signal
+
+queue_rules:
+  - name: default
+    # 2026-10-14: with the label rule below alone, Mergify only offered a manual "queue this PR" box on PR #139;
+    # autoqueue queues every PR that meets queue_conditions without a comment.
+    autoqueue: true
+    queue_conditions:
+      - label = queue
+      - base = main
+      - check-success = fast-tier
+      - -draft
+      - -conflict
+    merge_conditions:
+      - check-success = fast-tier
+    merge_method: merge
+    batch_size: 8
+    batch_max_wait_time: 5 min
+
+pull_request_rules:
+  - name: queue labelled PRs
+    conditions:
+      - label = queue
+      - base = main
+      - check-success = fast-tier
+      - -draft
+    actions:
+      queue:
+        name: default

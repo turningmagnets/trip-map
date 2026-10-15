@@ -65,3 +65,9 @@ Esri World Dark Gray Base + Reference (avoids OSM tile-server 403).
 | `data/trails_export_other_difficulty.*` | Recall supplement: ★≥3.8 green / greenBlue / dblack / connector trails (not on map) |
 | `SOURCES.md` | Provenance |
 | `README.md` | This file |
+
+## Pull request CI
+
+GitHub Actions runs `node --test tests/*.test.mjs` as `fast-tier` on the Hetzner
+`[self-hosted, aios-ci]` runner. `.mergify.yml` autoqueues PRs labelled `queue`
+against `main` after that check passes, and tests queue batches again.
