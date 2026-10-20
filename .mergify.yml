@@ -2,11 +2,18 @@
 merge_queue:
   dequeued_label: dequeued  # the board poller uses this authoritative removal signal
 
+# 2026-10-20: Mergify removed queue_rules[].autoqueue and rejected this file, stopping the queue. Its
+# replacement: every PR that meets a queue's queue_conditions is queued without a comment, once Merge
+# Protections is enabled for the repository in the Mergify dashboard (aios evidence/operator/2026-10-20/
+# mergify-autoqueue.md). https://docs.mergify.com/merge-protections/auto-merge/
+merge_protections_settings:
+  auto_merge_conditions: true
+
 queue_rules:
   - name: default
     # 2026-10-14: with the label rule below alone, Mergify only offered a manual "queue this PR" box on PR #139;
-    # autoqueue queues every PR that meets queue_conditions without a comment.
-    autoqueue: true
+    # autoqueue (now merge_protections_settings.auto_merge_conditions, above) queues every PR that meets
+    # queue_conditions without a comment.
     queue_conditions:
       - label = queue
       - base = main
