@@ -22,5 +22,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # spec keeps the readable console log; junit writes fast-tier.xml so a red batch names its failing test.
+      # node --test still exits non-zero on a failure. tests/fast-tier-reporting.test.mjs runs this exact command.
       - name: Test
-        run: node --test tests/*.test.mjs
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=fast-tier.xml tests/*.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fast-tier-${{ github.sha }}
+          path: fast-tier.xml
+          if-no-files-found: error
