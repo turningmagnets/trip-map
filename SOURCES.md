@@ -17,6 +17,10 @@ Primary upstream (see that project’s `SOURCES.md`):
 
 ## MTB trails
 
+Trail data © Trailforks (https://www.trailforks.com/), used under its terms for personal, non-commercial use, with share-alike credit.
+
+**Missing ★3.8–3.99 trails:** ★3.8–3.99 trails that the 2018 MTB Project archive and the cached Trailforks pages cannot supply are missing from the map; Trailforks is not re-crawled or scraped to fill them. This is the gap counted under "Known gaps" below (the uncrawled Idaho region and the ~37.8k low-vote Trailforks trails with no cached rating or coordinates).
+
 **Rebuilt 2026-10-08 (MT).** Cutoff lowered from ★4.0 to **★3.8**, plus a completeness pass over the whole local Trailforks crawl cache.
 
 **Count:** **12,563** trails (trailforks 6,082 · mtbproject 6,481), incl. 147 Trailforks trails from the 2026-10 browser pass (trailhead point only). Previous file (2026-10-02): 10,261.
