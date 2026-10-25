@@ -27,12 +27,12 @@ Trail data © Trailforks (https://www.trailforks.com/), used under its terms for
 
 | | Count |
 |---|---:|
-| ★ 3.8–3.99 | 4,794 |
-| ★ 4.0–4.49 | 9,471 |
-| ★ 4.5–4.99 | 1,796 |
-| ★ 5.0 | 1,342 |
-| blue / blue-black / black | 10,449 / 1,827 / 5,127 |
-| Default view (★≥3.8, ≥10 votes) | 5,085 (was 3,006 at ★≥4.0) |
+| ★ 3.8–3.99 | 5,189 |
+| ★ 4.0–4.49 | 9,816 |
+| ★ 4.5–4.99 | 1,774 |
+| ★ 5.0 | 1,345 |
+| blue / blue-black / black | 11,059 / 1,807 / 5,258 |
+| Default view (★≥3.8, ≥10 votes) | 5,083 (was 3,006 at ★≥4.0) |
 
 Only **blue, blue/black, and black** trails are listed; easy, easy/intermediate, double-black, and proline stay off. The ride-recording export (`data/trails_export.json` / `.csv`) has every trail in the file regardless of the map's vote filter, with Trailforks GPS track lines for 5,872 of them. `data/trails_export_other_difficulty.*` holds ★≥3.8 trails dropped only by the difficulty rules (not shown on the map).
 
