@@ -20,8 +20,13 @@ queue_rules:
       - check-success = fast-tier
       - -draft
       - -conflict
+      - -label = card-release-held
+      - or:
+          - -label = card-release-managed
+          - check-success = card-release-eligibility
     merge_conditions:
       - check-success = fast-tier
+      - -label = card-release-held
     merge_method: merge
     batch_size: 8
     batch_max_wait_time: 5 min
